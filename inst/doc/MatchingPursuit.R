@@ -80,7 +80,7 @@ out$sampling.rate
 #   signal = signal,
 #   empi.options = "-o local --gabor -i 25",
 #   write.to.file = TRUE,
-#   file.dest = NULL,
+#   path = NULL,
 #   file.name = "sample1.db"
 # )
 
@@ -177,7 +177,7 @@ fc <- filters.coeff(
 bip.montage.filt <- bip.montage 
 
 for (m in 1:ncol(bip.montage)) {
-  bip.montage.filt[, m] = signal::filtfilt(fc$notch, bip.montage[, m])     # 50Hz notch filter
+  bip.montage.filt[, m] = signal::filtfilt(fc$notch, bip.montage[, m])         # 50Hz notch filter
   bip.montage.filt[, m] = signal::filtfilt(fc$lowpass, bip.montage.filt[, m])  # Low pass IIR Butterworth
   bip.montage.filt[, m] = signal::filtfilt(fc$highpass, bip.montage.filt[, m]) # High pass IIR Butterwoth
 }
@@ -215,6 +215,7 @@ par(old.par)
 # run with the parameters "-o local --gabor -i 50"
 
 # sig <- list(bip.montage.filt, out1$sampling.rate)
+# names(sig) <- c("signal", "sampling.rate")
 
 # empi.out <- empi.execute (
 #   signal = sig,
@@ -222,7 +223,7 @@ par(old.par)
 #   write.to.file = TRUE,
 #   path = NULL,
 #   file.name = "EEG_bipolar_filtered.db"
-# ) 
+# )
 
 ## ----eeg_TF, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7----
 # Reading a SQLite file where all the generated atom's parameters are stored.
@@ -261,6 +262,13 @@ head(out$signal, 4)
 
 # The same elements of the signal in binary (floats are stored in 4 bytes).
 head(signal.bin, 48)
+
+# After decoding four sample numbers into numeric values.
+# Of course we get the same values ​​as in out$signal.
+readBin(signal.bin[1:4], what = "numeric", size = 4, endian = "little")
+readBin(signal.bin[5:8], what = "numeric", size = 4, endian = "little")
+readBin(signal.bin[41:44], what = "numeric", size = 4, endian = "little")
+readBin(signal.bin[45:48], what = "numeric", size = 4, endian = "little")
 
 ## ----read_empi_db_file, include = TRUE, echo = TRUE, warning = FALSE----------
 file <- system.file("extdata", "sample1.db", package = "MatchingPursuit")

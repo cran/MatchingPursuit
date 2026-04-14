@@ -1,7 +1,7 @@
 Package: MatchingPursuit
 Type: Package
 Title: Processing Time Series Data Using the Matching Pursuit Algorithm
-Version: 1.0.0
+Version: 1.0.1
 Author: Artur Gramacki [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-1610-9743>),
   Jarosław Gramacki [ctb] (ORCID:
@@ -30,7 +30,7 @@ Description: Provides tools for analysing and decomposing time series data using
 SystemRequirements: external tool (installed via empi.install()
         function). The package uses the implementation of the Matching
         Pursuit algorithm by Piotr T. Różański, available at
-        https://github.com/develancer/empi)
+        https://github.com/develancer/empi.
 Imports: edf, signal, RSQLite, DescTools, imager, raster, graphics,
         grDevices, utils, digest
 Suggests: knitr, rmarkdown, latex2exp, remotes
@@ -40,6 +40,6 @@ License: GPL (>= 2)
 Encoding: UTF-8
 RoxygenNote: 7.3.3
 NeedsCompilation: no
-Packaged: 2026-04-02 23:47:19 UTC; Artur
+Packaged: 2026-04-11 21:24:00 UTC; Artur
 Repository: CRAN
-Date/Publication: 2026-04-09 08:50:19 UTC
+Date/Publication: 2026-04-14 09:10:15 UTC
