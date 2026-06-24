@@ -1,48 +1,91 @@
 #' Processing Time Series Data Using the Matching Pursuit Algorithm
 #'
-#' Tools for analyzing and decomposing time-series data using the
-#' \strong{Matching Pursuit (MP)} algorithm, a greedy signal decomposition technique that represents
-#' complex signals as a linear combination of simpler functions (called atoms) selected from a
-#' redundant dictionary.
+#' Tools for analyzing and decomposing time_series data using the
+#' \strong{Matching Pursuit (MP)} algorithm, a greedy signal decomposition
+#' technique that represents complex signals as a linear combination of simpler
+#' functions (called atoms) selected from a redundant dictionary. Support
+#' for the \strong{Orthogonal Matching Pursuit (OMP)} variant of the classical MP
+#' algorithm is also provided.
 #'
 #' @details
-#' In addition to working with generic time-series data, the package also supports direct loading of
-#' data stored in EDF and EDF(+) files. These formats are widely used for storing physiological signals
-#' such as EEG, EMG, or ECG recordings. By enabling the import of EDF and EDF(+) files, the package
-#' facilitates the analysis of biomedical signals. The package requires the installation of an external
-#' program, \strong{Enhanced Matching Pursuit Implementation} (EMPI). This tool implements the Matching
-#' Pursuit algorithm developed by \strong{Piotr T. Różański} and is available
-#' at \url{https://github.com/develancer/empi}
+#' Both the MP and OMP algorithms only support Gabor atoms. However, both algorithms
+#' are much more general. They can handle any atom dictionary, as long as we can
+#' compute the dot products of the signal and the atoms. Gabor atoms are particularly
+#' popular because they well implement the time-frequency tradeoff implied by the
+#' Heisenberg Uncertainty Principle and describe many natural signals.
 #'
-#' Example datasets available through the \code{system.file()} function are:
+#' In addition to generic time-series data, the package supports direct loading of
+#' data stored in \strong{EDF/EDF(+)} and \strong{WFDB} (WaveForm DataBase) formats.
+#' These formats are widely used for physiological signals such as EEG and ECG recordings.
+#' Support for EDF/EDF(+) and WFDB import facilitates the analysis of biomedical signals.
+#'
+#' The package requires installation of an external program,
+#' \strong{Enhanced Matching Pursuit Implementation (EMPI)}.
+#' This tool implements the Matching Pursuit algorithm developed by
+#' \strong{Piotr T. Różański} and is available at
+#' \url{https://github.com/develancer/empi}
+#'
+#' Example datasets available via the \code{system.file()} function:
 #'
 #'  \itemize{
 #'    \item \code{EEG.edf}
 #'      \itemize{
-#'        \item 19 EEG channels + 1 EDF Annotations channel
+#'        \item 19 EEG channels + 1 EDF_Annotations channel
 #'        \item sampling frequency: 256 Hz, signal length: 10 sec.
 #'        \item channel names: Fp1, Fp2, F3, F4, F7, F8, Fz, C3, C4, Cz, T3, T5, T4, T6, P3, P4, Pz, O1, O2, EDF_Annotations
 #'      }
-#'    \item \code{sample1.csv}
+#'    \item \code{EEG_bipolar_filtered.db}, \code{EEG_bipolar_filtered.csv}, \code{EEG_bipolar_filtered.bin}
+#'      \itemize{
+#'        \item 18 EEG channels after application of the double-banana montage and filtering of the \code{EEG.edf} data
+#'        \item sampling frequency: 256 Hz, signal length: 10 sec.
+#'        \item channel names: Fp2_F4, F4_C4, C4_P4, P4_O2, Fp1_F3, F3_C3, C3_P3, P3_O1, Fp2_F8, F8_T4,
+#'                             T4_T6, T6_O2, Fp1_F7, F7_T3, T3_T5, T5_O1, Fz_Cz, Cz_Pz
+#'      }
+#'    \item \code{sample1.csv}, \code{sample1.db}
 #'      \itemize{
 #'        \item 1 channel
 #'        \item sampling frequency: 1024 Hz, signal length: 1 sec.
 #'      }
-#'    \item \code{sample2.csv}
+#'    \item \code{sample2.csv}, \code{sample2.db}
 #'      \itemize{
 #'        \item 1 channel
-#'        \item sampling frequency: 128 Hz Hz, signal length: 10 sec.
+#'        \item sampling frequency: 128 Hz, signal length: 10 sec.
 #'      }
-#'    \item \code{sample3.csv}
+#'    \item \code{sample3.csv}, \code{sample3.db}
 #'      \itemize{
-#'        \item 3 channels (random numbers from 0 to 1 in each channel)
-#'        \item sampling frequency: 128 Hz Hz, signal length: 2 sec.
+#'        \item 3 channels (sum of four sinusoids, burst signal, sum of three Gabor atoms)
+#'        \item sampling frequency: 128 Hz, signal length: 2 sec.
 #'      }
-#' }
-#' The first line of the \code{.csv} file contains two numbers: the sampling rate in Hz (\code{freq})
-#' and the signal length in seconds (\code{sec}). \code{read.csv.signals} function checks
-#' whether the file actually contains \code{round(freq*sec)} samples. The two numbers
-#' must by separated by one or more whitespace characters.
+#'    \item \code{00001_lr.dat}, \code{00001_lr.hea}
+#'      \itemize{
+#'        \item Example ECG recording from \url{https://physionet.org/content/ptb-xl/1.0.3/}
+#'        \item 12 ECG leads, 10 sec, 16-bit integer format
+#'        \item standard lead names: I, II, III, aVR, aVL, aVF, V1–V6
+#'      }
+#'    \item \code{sample1_dict.xml}, \code{sample2_dict.xml}, \code{sample3_dict.xml}, \code{sample3_dict_EMPI.xml},
+#'    \code{EEG_bipolar_filtered.xml}, \code{sample1_dict_one_block.xml}
+#'      \itemize{
+#'        \item XML files describing a multiscale Gabor dictionary.
+#'        \item such files can be generated from the EMPI program executed with the \code{--dictionary-output}
+#'        option, which allows you to save (in XML format) data about the dictionary used.
+#'        See the \code{read_dict()} function help page for examples and further details.
+#'      }
+#'  }
+#'
+#' The first line of a \code{.csv} file contains two numbers: sampling rate in Hz (\code{freq})
+#' and signal length in seconds (\code{sec}). The \code{read_csv_signals()} function verifies
+#' whether the file contains exactly \code{round(freq * sec)} samples. The two numbers
+#' must be separated by one or more whitespace characters.
+#'
+#' Optionally, channel names may be specified in the second line of the \code{.csv} file.
+#' In such cases, use \code{col_names_in_csv = TRUE} when calling \code{read_csv_signals()}.
+#'
+#' Files with the \code{.db} extension are in \code{SQLite} format and are produced by
+#' the \code{empi_execute()} function.
+#'
+#' @section Examples:
+#' A slightly longer demo script showing the most important functionality of the package:
+#' \code{system.file("examples", "quickstart.R", package = "MatchingPursuit")}
 #'
 #' @docType package
 #'
