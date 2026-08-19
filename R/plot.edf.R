@@ -1,4 +1,4 @@
-#' The function displays EEG signals
+#' Plots EEG signals stored in an object of class \code{edf}
 #'
 #' Signals are displayed one below another and may be shown in different
 #' colours for improved readability.
@@ -9,8 +9,10 @@
 #' @param x Object of class \code{edf} (from \code{read_edf_ signals()}).
 #'
 #' @param begin Time point (in seconds) at which to start plotting.
+#' If \code{NULL}, plotting starts at the beginning of the signal (0 seconds).
 #'
 #' @param end Time point (in seconds) at which to stop plotting.
+#'  If \code{NULL}, plotting continues to the end of the signal.
 #'
 #' @param panel_height Controls the vertical spacing between individual signals.
 #' If \code{NULL}, the value is chosen automatically so that all signals are clearly
@@ -61,12 +63,12 @@
 #' )
 plot.edf <- function(
     x,
-    begin,
-    end,
+    begin = NULL,
+    end = NULL,
     panel_height = NULL,
-    rainbow = TRUE,
-    bg_colour = "black",
-    txt_col = "white",
+    rainbow = FALSE,
+    bg_colour = "white",
+    txt_col = "black",
     zero_line = TRUE,
     main = NULL,
     ...
@@ -74,6 +76,7 @@ plot.edf <- function(
 
   # Save current graphical parameters to reset
   old.par <- par(no.readonly = TRUE)
+  on.exit(par(old.par), add = FALSE)
 
   if (!inherits(x, "edf")) {
     stop("'x' must be an object of class 'edf'.")
@@ -82,7 +85,8 @@ plot.edf <- function(
   par(bg = bg_colour)
 
   eeg <- as.matrix(x$signal)
-  sf <- x$ sampling_frequency
+  sampling_frequency <- x$sampling_frequency
+  signal_length <- length(x$time) / sampling_frequency
   channels <- ncol(eeg)
 
   if (rainbow) {
@@ -91,7 +95,7 @@ plot.edf <- function(
     line.cols <- rep("black", length.out = channels)
   }
 
-  if (is.null(main)) main <- paste("file name: ", x$record.name, sep = "")
+  if (is.null(main)) main <- paste("file name: ", x$record_name, sep = "")
 
   # Each column is centered around its median. In signals like EEG/EGM, this
   # helps remove the base-level offset (DC offset), making channels more comparable.
@@ -99,8 +103,31 @@ plot.edf <- function(
   md <- apply(eeg, 2, median)
   eeg <- sweep(eeg, 2, md, "-")
 
-  from <- begin * sf
-  to <- end * sf
+  if (is.null(begin)) begin <- 0
+  if (is.null(end)) end <- signal_length
+
+  if (length(begin) != 1L || !is.numeric(begin) || !is.finite(begin)) {
+    stop("'begin' must be NULL or a single finite numeric value.")
+  }
+
+  if (length(end) != 1L || !is.numeric(end) || !is.finite(end)) {
+    stop("'end' must be NULL or a single finite numeric value.")
+  }
+
+  if (begin < 0 || begin > signal_length) {
+    stop("'begin' must be between 0 and the signal length.")
+  }
+
+  if (end < 0 || end > signal_length) {
+    stop("'end' must be between 0 and the signal length.")
+  }
+
+  if (end <= begin) {
+    stop("'end' must be greater than 'begin'.")
+  }
+
+  from <- begin * sampling_frequency
+  to <- end * sampling_frequency
 
   eeg <- eeg[from:to, ]
 
@@ -108,10 +135,10 @@ plot.edf <- function(
   n <- nrow(eeg)
 
   # time points
-  t <- seq(begin, by = 1 / sf, length.out = n)
+  t <- seq(begin, by = 1 / sampling_frequency, length.out = n)
 
   # duration of EEG signal (in sec.)
-  duration <- n / sf
+  duration <- n / sampling_frequency
 
   if (is.null(panel_height)) {
     panel_height <- ceiling(max(abs(range(eeg)))) / 2
@@ -127,7 +154,6 @@ plot.edf <- function(
   ylim <- c(-ph2 - b, max(baseline) + ph2 + b)
 
   op <- par(mar = c(2, 4, 1, 1), xaxs = "i", yaxs = "i")
-  on.exit(par(op))
 
   plot(
     NA,
@@ -172,8 +198,6 @@ plot.edf <- function(
     padj = -1.5,
     tcl = 0.6
   )
-
-  on.exit(par(old.par))
 
   message("Actual value of 'panel_height' parameter is: ", panel_height)
 }

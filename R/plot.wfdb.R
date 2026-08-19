@@ -1,4 +1,17 @@
-#' The function displays ECG signals in a layout corresponding to standard paper ECG printouts
+#' The function displays WFDB signals in a layout corresponding to standard paper ECG printouts
+#'
+#' ECG signals are read from files in WFDB format.
+#'
+#' WFDB (WaveForm DataBase) is a standard file format for storing, reading,
+#' and analyzing physiological time-series signals. It is widely used for
+#' signals such as ECG, EEG, blood pressure, respiration, and other biomedical
+#' waveforms. It is the file format used by the PhysioNet project and is commonly
+#' used in research datasets.
+#'
+#' A WFDB record typically consists of two main files:
+#' \code{.dat} - binary signal samples (waveform values), and \code{.hea} - a header
+#' file describing how to interpret the data. In some cases, additional annotation
+#' files such as \code{.atr} may be present, containing beat labels or rhythm annotations.
 #'
 #' A typical ECG paper layout was used, with a small grid of 0.04 s × 0.1 mV and a
 #' large grid of 0.20 s × 0.5 mV.
@@ -7,13 +20,16 @@
 #' @importFrom graphics lines segments
 #' @importFrom stats median
 #'
-#' @param x Object of class \code{ecg} (from \code{read_ecg_signals()}).
+#' @param x Object of class \code{wfdb} (from \code{read_wfdb_signals()}).
 #'
 #' @param begin Time point (in seconds) at which to start plotting.
+#' If \code{NULL}, plotting starts at the beginning of the signal (0 seconds).
 #'
 #' @param end Time point (in seconds) at which to stop plotting.
+#' If \code{NULL}, plotting continues to the end of the signal.
 #'
-#' @param panel_height Number of large squares to display (according to standard ECG paper):
+#' @param panel_height Height of each ECG channel panel (in mV).
+#' One large ECG-paper square corresponds to 0.5 mV. According to standard ECG paper:
 #' \itemize{
 #'     \item small grid: 0.04 sec. x 0.1 mV
 #'     \item large grid: 0.20 sec. x 0.5 mV
@@ -32,10 +48,7 @@
 #' @examples
 #' # ECG data comes from https://physionet.org/content/ptb-xl/1.0.3/
 #' file <- system.file("extdata", "00001_lr.hea", package = "MatchingPursuit")
-#' dir <- dirname(file)
-#' name <- tools::file_path_sans_ext(basename(file))
-#'
-#' out <- read_ecg_signals(file)
+#' out <- read_wfdb_signals(file)
 #'
 #' plot(
 #'   x = out,
@@ -46,10 +59,10 @@
 #'   small_squares = TRUE
 #' )
 #'
-plot.ecg <- function(
+plot.wfdb <- function(
     x,
-    begin,
-    end,
+    begin = NULL,
+    end = NULL,
     panel_height = 3,
     small_squares = TRUE,
     zero_line = FALSE,
@@ -62,36 +75,61 @@ plot.ecg <- function(
 
   # Save current graphical parameters to reset
   old.par <- par(no.readonly = TRUE)
+  on.exit(par(old.par), add = FALSE)
 
-  if (!inherits(x, "ecg")) {
-    stop("'x' must be an object of class 'ecg'.")
+  if (!inherits(x, "wfdb")) {
+    stop("'x' must be an object of class 'wfdb'.")
   }
 
-  ecg <- as.matrix(x$signal)
-  sf <- x$ sampling_frequency
-  channels <- ncol(ecg)
+  wfdb <- as.matrix(x$signal)
+  sampling_frequency <- x$sampling_frequency
+  signal_length <- nrow(wfdb) / sampling_frequency
+  channels <- ncol(wfdb)
 
   main <- paste("record name: ", x$record_name, sep = "")
 
   # Each column is centered around its median. In signals like ECG/EGM, this
   # helps remove the base-level offset (DC offset), making channels more comparable.
   # Following this line, each channel has a median of approximately zero.
-  md <- apply(ecg, 2, median)
-  ecg <- sweep(ecg, 2, md, "-")
+  md <- apply(wfdb, 2, median)
+  wfdb <- sweep(wfdb, 2, md, "-")
 
-  from <- begin * sf
-  to <- end * sf
+  if (is.null(begin)) begin <- 0
+  if (is.null(end)) end <- signal_length
 
-  ecg <- ecg[from:to, ]
+  if (length(begin) != 1L || !is.numeric(begin) || !is.finite(begin)) {
+    stop("'begin' must be NULL or a single finite numeric value.")
+  }
 
-  lead.names <- colnames(ecg)
-  n <- nrow(ecg)
+  if (length(end) != 1L || !is.numeric(end) || !is.finite(end)) {
+    stop("'end' must be NULL or a single finite numeric value.")
+  }
+
+  if (begin < 0 || begin > signal_length) {
+    stop("'begin' must be between 0 and the signal length.")
+  }
+
+  if (end < 0 || end > signal_length) {
+    stop("'end' must be between 0 and the signal length.")
+  }
+
+  if (end <= begin) {
+    stop("'end' must be greater than 'begin'.")
+  }
+
+  from <- begin * sampling_frequency
+  to <- end * sampling_frequency
+
+  wfdb <- wfdb[from:to, ]
+
+  lead.names <- colnames(wfdb)
+  n <- nrow(wfdb)
 
   # time points
-  t <- seq(begin, by = 1 / sf, length.out = n)
+  t <- seq(begin, by = 1 / sampling_frequency, length.out = n)
 
-  # duration of ECG signal (in sec.)
-  duration <- n / sf
+  # duration of wfdb signal (in sec.)
+  duration <- n / sampling_frequency
 
   # panel_height - single strip height (mV)
   ph2 <- panel_height / 2
@@ -101,7 +139,6 @@ plot.ecg <- function(
   ylim <- c(-ph2, max(baseline) + ph2)
 
   op <- par(mar = c(2, 4, 1, 1), xaxs = "i", yaxs = "i")
-  on.exit(par(op))
 
   plot(
     NA,
@@ -144,7 +181,7 @@ plot.ecg <- function(
     if (zero_line) segments(begin, y0, end, y0, col = "blue", lwd = 0.5)
 
     ## signal
-    lines(t, ecg[, i] + y0, lwd = 1)
+    lines(t, wfdb[, i] + y0, lwd = 1)
 
     ## lead names
     shift <- (end - begin) * 0.02
@@ -156,6 +193,4 @@ plot.ecg <- function(
        labels = seq(begin, end, by = 1),
        lwd = 0,
        lwd.ticks = 1)
-
-  on.exit(par(old.par))
 }

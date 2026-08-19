@@ -7,24 +7,24 @@
 #' and the input signal are computed using cross-products. In the second step,
 #' the top-ranked atoms are reconstructed with optimal phase alignment and
 #' converted into real-valued time-domain signals. The resulting object is used
-#' as input to \code{omp_core()} or to \code{omp_execute()}. This second function
-#' is a wrapper around the first function. It is prepared in such a way that an
-#' object of class \code{mp} is created as output. This allows it to be passed
-#' to the \code{tf_map()} function, which creates a time-frequency map.
+#' as input to \code{omp_core()}, \code{mp_core()} or to \code{mp_omp_execute()}.
+#' This second function is a wrapper around the first function. It is prepared
+#' in such a way that an object of class \code{mp} is created as output.
+#' This allows it to be passed to the \code{tf_map()} function, which creates
+#' a time-frequency map.
 #'
 #' @param atoms_dict A matrix describing Gabor atoms (e.g. output of
-#'   \code{read_dict()}). Each row represents a candidate atom with fields:
+#'   \code{read_gabor_dict()}). Each row represents a candidate atom with fields:
 #'   \code{block}, \code{time_sec}, \code{freq_hz}, \code{window_len}, etc.
 #'
 #' @param atoms_dict A matrix describing Gabor atoms (e.g. output of
-#'   \code{read_dict()}). Each row represents a candidate atom and must
+#'   \code{read_gabor_dict()}). Each row represents a candidate atom and must
 #'   contain the following columns: \code{block}, \code{time_sec}, \code{freq_hz},
 #'   and \code{window_len}. Other columns are ignored.
 #'
-#' @param signal A numeric vector, matrix, or data frame representing the signal(s)
-#'   to be analyzed. Each column is treated as a separate channel.
-#'
-#' @param sf Sampling frequency (Hz) of the signal.
+#' @param signal An object of class \code{sig} returned by \code{read_csv_signals()},
+#' an object of class \code{edf} returned by \code{read_edf_signals()},
+#' or an object of class \code{wfdb} returned by \code{read_wfdb_signals()}.
 #'
 #' @param topk Number of best atoms to select per signal.
 #'   If \code{NULL}, defaults to \code{ceiling(0.05 * nrow(atoms_dict))}.
@@ -52,9 +52,10 @@
 #' @export
 #'
 #' @seealso
-#' \code{\link{read_dict}},
-#' \code{\link{omp_execute}}
+#' \code{\link{read_gabor_dict}},
+#' \code{\link{mp_omp_execute}}
 #' \code{\link{omp_core}}
+#' \code{\link{mp_core}}
 #'
 #' @examples
 #' # +-------------------------------------------------------------+
@@ -66,27 +67,26 @@
 #'   package = "MatchingPursuit"
 #' )
 #'
-#' sample3 <- read_csv_signals(
+#' signal <- read_csv_signals(
 #'   sig_file,
 #'   col_names_in_csv = TRUE
 #' )
 #'
-#' sf <- sample3$sampling_frequency
-#' signal <- sample3$signal
-#' duration <- nrow(sample3$signal) / sf
+#' sampling_frequency <- signal$sampling_frequency
+#' duration <- nrow(signal$signal) / sampling_frequency
 #'
 #' # +-------------------------------------------------------------+
 #' # | Step 2: Read dictionary                                     |
 #' # +-------------------------------------------------------------+
 #' xml_file <- system.file(
 #'   "extdata",
-#'   "sample3_dict.xml",
+#'   "sample3.xml",
 #'   package = "MatchingPursuit"
 #' )
 #'
-#' atoms_dict <- read_dict(
+#' atoms_dict <- read_gabor_dict(
 #'   xml_file,
-#'   sf,
+#'   sampling_frequency,
 #'   duration,
 #'   verbose = TRUE
 #' )
@@ -102,7 +102,6 @@
 #'   atoms_dict = atoms_dict,
 #'   signal = signal,
 #'   sigma_divisor = NULL,
-#'   sf = sf,
 #'   topk = 5000,
 #'   verbose = TRUE
 #' )
@@ -116,10 +115,10 @@
 #' # | Output: object of class 'mp'                                |
 #' # | Processes: all signal channels (3 in this example)          |
 #' # +-------------------------------------------------------------+
-#' fit_1 <- omp_execute(
+#' fit_1 <- mp_omp_execute(
+#'   mode = "omp",
 #'   dictionary = out_topk_atoms,
 #'   signal = signal,
-#'   sf = sf,
 #'   n_nonzero_coefs = 50
 #' )
 #'
@@ -134,7 +133,7 @@
 #' # +-------------------------------------------------------------+
 #' fit_2 <- omp_core(
 #'   dictionary = out_topk_atoms,
-#'   signal = signal,
+#'   signal = signal$signal,
 #'   channel = 1,
 #'   n_nonzero_coefs = 50
 #' )
@@ -144,18 +143,19 @@
 #' # +-------------------------------------------------------------+
 #' plot(fit_1, channel = 3)
 #'
-topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL, verbose = FALSE) {
+topk_atoms <- function(atoms_dict, signal, topk = NULL, sigma_divisor = NULL, verbose = FALSE) {
 
-  if (!is.matrix(signal)) {
-    if (is.vector(signal) || is.data.frame(signal)) {
-      signal <- as.matrix(signal)
-    } else {
-      stop("Parameter must be a matrix or convertible to a matrix")
-    }
+  if (!inherits(signal, "sig") &&
+      !inherits(signal, "edf") &&
+      !inherits(signal, "wfdb")) {
+    stop("'signal' must be an object of class 'sig', 'edf', or 'wfdb'.")
   }
 
-  proj_mod_mtx <- matrix(0, nrow = nrow(atoms_dict), ncol = ncol(signal))
-  N <- nrow(signal)
+  sig <- as.matrix(signal$signal)
+  sampling_frequency <- signal$sampling_frequency
+
+  proj_mod_mtx <- matrix(0, nrow = nrow(atoms_dict), ncol = ncol(sig))
+  N <- nrow(sig)
 
   # By default select 5% best atoms
   if (is.null(topk)) {
@@ -185,7 +185,7 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
   for (i in blocks_id) {
     ids <- which(atoms_dict[, "block"] == i)
     block <- atoms_dict[ids,]
-    my_list <- gabor_proj_fft(block, signal)
+    my_list <- gabor_projection_fft(block, sig)
     proj_mod_mtx[ids,] <- my_list$proj_mod_mtx
   }
 
@@ -198,20 +198,20 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
   # ------------------------------------------------------------------+
   atoms_list <- list()
 
-  for (s in 1:ncol(signal)) {
+  for (s in 1:ncol(sig)) {
     atoms_list[[s]] <- matrix(NA, nrow = N, ncol = topk)
   }
-  names(atoms_list) <- paste0("signal_", 1:ncol(signal))
+  names(atoms_list) <- paste0("signal_", 1:ncol(sig))
 
-  times_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
-  times_center_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
-  freq_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
-  sigma_mtx <- matrix(NA,  nrow = topk, ncol = ncol(signal))
-  window_len_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
-  topk_idx_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
-  phase_mtx <- matrix(NA, nrow = topk, ncol = ncol(signal))
+  times_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
+  times_center_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
+  freq_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
+  sigma_mtx <- matrix(NA,  nrow = topk, ncol = ncol(sig))
+  window_len_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
+  topk_idx_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
+  phase_mtx <- matrix(NA, nrow = topk, ncol = ncol(sig))
 
-  for (i in 1:ncol(signal)) {
+  for (i in 1:ncol(sig)) {
     topk_idx <- order(proj_mod_mtx[, i], decreasing = TRUE)[1:topk]
     topk_atoms_dict <- atoms_dict[topk_idx,]
 
@@ -224,13 +224,13 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
     phase_vec <- numeric(topk)
 
     blocks_id <- unique(topk_atoms_dict[,"block"])
-    topk_proj_mod_mtx <- matrix(0, nrow = nrow(topk_atoms_dict), ncol = ncol(signal))
-    topk_fft_bin_mtx <- matrix(0, nrow = nrow(topk_atoms_dict), ncol = ncol(signal))
+    topk_proj_mod_mtx <- matrix(0, nrow = nrow(topk_atoms_dict), ncol = ncol(sig))
+    topk_fft_bin_mtx <- matrix(0, nrow = nrow(topk_atoms_dict), ncol = ncol(sig))
 
     for (k in blocks_id) {
       ids <- which(topk_atoms_dict[, "block"] == k)
       block <- topk_atoms_dict[ids, , drop = FALSE]
-      my_list <- gabor_proj_fft(block, signal)
+      my_list <- gabor_projection_fft(block, sig)
       topk_proj_mod_mtx[ids,] <- my_list$proj_mod_mtx
       topk_fft_bin_mtx[ids,] <- my_list$fft_bin_mtx
     }
@@ -244,7 +244,7 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
       freq <- topk_atoms_dict[j, "freq_hz"]
       window_len <- topk_atoms_dict[j, "window_len"]
 
-      n0 <- as.integer(time * sf) + 1
+      n0 <- as.integer(time * sampling_frequency) + 1
       n <- 0:(window_len - 1)
       c <- (window_len - 1) / 2
 
@@ -263,7 +263,7 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
       # Final real-valued atom with optimal phi ----
       #       ^^^^^^^^^^^^^^^^      ^^^^^^^^^^^
       # ------------------------------------------------------------------+
-      carrier <- cos(2 * pi * freq * n / sf + phi)
+      carrier <- cos(2 * pi * freq * n / sampling_frequency + phi)
       atom <- w * carrier
       x <- rep(0, N)
       x[n0:end_idx] <- atom[1:valid_len]
@@ -277,10 +277,10 @@ topk_atoms <- function(atoms_dict, signal, sf, topk = NULL, sigma_divisor = NULL
 
       atoms_mtx[, j] <- x
       times_vec[j] <- time
-      times_center_vec[j] <- (time + (window_len / (2 * sf)))
+      times_center_vec[j] <- (time + (window_len / (2 * sampling_frequency)))
       freq_vec[j] <- freq
-      sigma_vec[j] <- sigma / sf
-      window_len_vec[j] <- window_len / sf
+      sigma_vec[j] <- sigma / sampling_frequency
+      window_len_vec[j] <- window_len / sampling_frequency
       phase_vec[j] <- phi
 
     } ### for (j in topk_idx)

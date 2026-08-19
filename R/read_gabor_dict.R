@@ -1,19 +1,19 @@
-#' Read dictionary of Gabor atoms from XML file
+#' Read a Gabor dictionary from an XML file
 #'
 #' The function parses an XML file describing a multiscale Gabor dictionary.
 #'
 #' @param xml_file
 #' Path to the XML file containing the dictionary definition.
 #'
-#' @param sf
-#' Sampling frequency (in Hz) of the signal associated with the  dictionary.
+#' @param sampling_frequency
+#' Sampling frequency (in Hz) of the signal associated with the dictionary.
 #'
 #' @param duration
 #' Duration of the signal (in seconds) used to determine the number
 #' of valid time positions.
 #'
 #' @param verbose
-#' Logical; if \code{TRUE}, prints progress information about  parsed blocks
+#' Logical; if \code{TRUE}, prints progress information about parsed blocks
 #' and generated atoms.
 #'
 #' @return A matrix where each row describes a Gabor atom with the following columns:
@@ -64,7 +64,7 @@
 #' shorter than the window length, no time positions are generated for that block.
 #'
 #' @section Usage in sparse decomposition pipeline:
-#' The output of \code{read_dict()} is a low-level dictionary of atom
+#' The output of \code{read_gabor_dict()} is a low-level dictionary of atom
 #' parameters (time-frequency grid description). It serves as an input
 #' to \code{topk_atoms()}, which:
 #' \itemize{
@@ -76,14 +76,15 @@
 #'
 #' The resulting \code{"topk"} object contains precomputed atoms and metadata
 #' that are directly consumed by \code{omp_core()} for sparse decomposition.
-#' In summary, the processing pipeline is:
-#' \code{read_dict()} \eqn{\rightarrow} \code{topk_atoms()}
-#' \eqn{\rightarrow} \code{omp_core()}.
+#' In a typical native R workflow, the output of \code{read_gabor_dict()} is passed
+#' to \code{topk_atoms()}, and the resulting \code{"topk"} object is then used
+#' by \code{mp_omp_execute()} or the lower-level \code{mp_core()} and
+#' \code{omp_core()} functions.
 #'
 #' @section Exporting dictionaries from the EMPI program:
 #' The EMPI program can export dictionary definitions as an XML file containing
 #' atom parameters. This file may include additional elements that are not used
-#' in this package, these are safely ignored by the \code{read_dict()} function.
+#' in this package, these are safely ignored by the \code{read_gabor_dict()} function.
 #' This feature enables direct comparison between the EMPI implementation of the
 #' Matching Pursuit (MP) algorithm and the Orthogonal Matching Pursuit (OMP)
 #' algorithm implemented in \code{omp_core()}.
@@ -99,9 +100,12 @@
 #'
 #' @seealso
 #' \code{\link{topk_atoms}},
-#' \code{\link{omp_execute}}
+#' \code{\link{mp_omp_execute}},
 #' \code{\link{omp_core}},
-#' \code{\link{run_omp_pipeline}}
+#' \code{\link{mp_core}},
+#' \code{\link{mp_omp_pipeline}},
+#' \code{\link{generate_xml_dict}}
+#'
 #'
 #' @examples
 #' # +-------------------------------------------------------------+
@@ -118,21 +122,21 @@
 #'   col_names_in_csv = TRUE
 #' )
 #'
-#' sf <- sample3$sampling_frequency
-#' duration <- nrow(sample3$signal) / sf
+#' sampling_frequency <- sample3$sampling_frequency
+#' duration <- nrow(sample3$signal) / sampling_frequency
 #'
 #' # +---------------------------------------------------------------+
 #' # | Read dictionary definition                                    |
 #' # +---------------------------------------------------------------+
 #' xml_file <- system.file(
 #'   "extdata",
-#'   "sample3_dict.xml",
+#'   "sample3.xml",
 #'   package = "MatchingPursuit"
 #' )
 #'
-#' atoms_dict <- read_dict(
+#' atoms_dict <- read_gabor_dict(
 #'   xml_file,
-#'   sf,
+#'   sampling_frequency,
 #'   duration,
 #'   verbose = TRUE
 #' )
@@ -151,7 +155,7 @@
 #' # opts <- paste0(
 #' #  "-o none --gabor -i 50 --full-atoms-in-signal --dictionary-output ",
 #' #  dest_dir,
-#' #   "/sample3_dict_EMPI.xml"
+#' #   "/sample3_EMPI.xml"
 #' # )
 #'
 #' # out_sample3 <- empi_execute(
@@ -160,9 +164,9 @@
 #' # )
 #'
 #' # +---------------------------------------------------------------+
-#' # | Please compare the sample3_dict.xml and sample3_dict_EMPI.xml |
+#' # | Please compare the sample3.xml and sample3_EMPI.xml           |
 #' # | files and find out which fields in the latter file are not    |
-#' # | used in the read_dict() function.                             |
+#' # | used in the read_gabor_dict() function.                       |
 #' # +---------------------------------------------------------------+
 #' con <- file(xml_file, open = "r")
 #' cat(readLines(con, n = 22), sep = "\n")
@@ -170,7 +174,7 @@
 #'
 #' xml_file_2 <- system.file(
 #'   "extdata",
-#'   "sample3_dict_EMPI.xml",
+#'   "sample3_EMPI.xml",
 #'   package = "MatchingPursuit"
 #' )
 #'
@@ -180,13 +184,35 @@
 #' }
 #' close(con)
 #'
-read_dict <- function (xml_file, sf, duration, verbose = FALSE) {
+read_gabor_dict <- function (
+    xml_file,
+    sampling_frequency,
+    duration,
+    verbose = FALSE) {
 
-  signal_length <- sf * duration
+  if (!is.numeric(sampling_frequency) ||
+      length(sampling_frequency) != 1L ||
+      !is.finite(sampling_frequency) ||
+      sampling_frequency <= 0) {
+    stop("'sampling_frequency' must be a positive number.")
+  }
+
+  if (!is.numeric(duration) ||
+      length(duration) != 1L ||
+      !is.finite(duration) ||
+      duration <= 0) {
+    stop("'duration' must be a positive number.")
+  }
+
+  signal_length <- round(sampling_frequency * duration)
 
   # Parse XML
   doc <- read_xml(xml_file)
   blocks <- xml_find_all(doc, ".//block")
+
+  if (length(blocks) == 0L) {
+    stop("No dictionary blocks found in the XML file.")
+  }
 
   if (verbose) message("Number of blocks: ", length(blocks))
 
@@ -239,11 +265,11 @@ read_dict <- function (xml_file, sf, duration, verbose = FALSE) {
 
     for (t in time_positions) {
       for (k in freq_bins) {
-        freq_hz <- k * sf / fft_size
+        freq_hz <- k * sampling_frequency / fft_size
         atom <- list(
           block = block_id,
           time_sample = t,
-          time_sec = t / sf,
+          time_sec = t / sampling_frequency,
           freq_bin = k,
           freq_hz = freq_hz,
           window_len = window_len,

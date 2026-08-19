@@ -1,4 +1,4 @@
-#' Processing Time Series Data Using the Matching Pursuit Algorithm
+#' Sparse Time-Series Decomposition Using Matching Pursuit and Orthogonal Matching Pursuit
 #'
 #' Tools for analyzing and decomposing time_series data using the
 #' \strong{Matching Pursuit (MP)} algorithm, a greedy signal decomposition
@@ -25,6 +25,10 @@
 #' \strong{Piotr T. Różański} and is available at
 #' \url{https://github.com/develancer/empi}
 #'
+#' The package also provides a pure R implementation of the \strong{MP} algorithm.
+#' It is primarily intended for reference and educational purposes and is
+#' slower and less numerically precise than the \strong{EMPI} implementation.
+#'
 #' Example datasets available via the \code{system.file()} function:
 #'
 #'  \itemize{
@@ -32,14 +36,13 @@
 #'      \itemize{
 #'        \item 19 EEG channels + 1 EDF_Annotations channel
 #'        \item sampling frequency: 256 Hz, signal length: 10 sec.
-#'        \item channel names: Fp1, Fp2, F3, F4, F7, F8, Fz, C3, C4, Cz, T3, T5, T4, T6, P3, P4, Pz, O1, O2, EDF_Annotations
+#'        \item channel names: \code{Fp1, Fp2, F3, F4, F7, F8, Fz, C3, C4, Cz, T3, T5, T4, T6, P3, P4, Pz, O1, O2, EDF_Annotations}
 #'      }
-#'    \item \code{EEG_bipolar_filtered.db}, \code{EEG_bipolar_filtered.csv}, \code{EEG_bipolar_filtered.bin}
+#'    \item \code{EEG_filter_resample_montage.db}, \code{EEG_filter_resample_montage.csv}, \code{EEG_filter_resample_montage.bin}
 #'      \itemize{
-#'        \item 18 EEG channels after application of the double-banana montage and filtering of the \code{EEG.edf} data
-#'        \item sampling frequency: 256 Hz, signal length: 10 sec.
-#'        \item channel names: Fp2_F4, F4_C4, C4_P4, P4_O2, Fp1_F3, F3_C3, C3_P3, P3_O1, Fp2_F8, F8_T4,
-#'                             T4_T6, T6_O2, Fp1_F7, F7_T3, T3_T5, T5_O1, Fz_Cz, Cz_Pz
+#'        \item 18 EEG channels after application of the double-banana montage, resampling and filtering of the \code{EEG.edf} data
+#'        \item sampling frequency: 256 Hz, signal length: 10 sec (64 Hz after resampling).
+#'        \item channel names: \code{Fp2_F4, F4_C4, C4_P4, P4_O2, Fp1_F3, F3_C3, C3_P3, P3_O1, Fp2_F8, F8_T4, T4_T6, T6_O2, Fp1_F7, F7_T3, T3_T5, T5_O1, Fz_Cz, Cz_Pz}
 #'      }
 #'    \item \code{sample1.csv}, \code{sample1.db}
 #'      \itemize{
@@ -60,15 +63,15 @@
 #'      \itemize{
 #'        \item Example ECG recording from \url{https://physionet.org/content/ptb-xl/1.0.3/}
 #'        \item 12 ECG leads, 10 sec, 16-bit integer format
-#'        \item standard lead names: I, II, III, aVR, aVL, aVF, V1–V6
+#'        \item standard lead names: \code{I, II, III, aVR, aVL, aVF, V1–V6}
 #'      }
-#'    \item \code{sample1_dict.xml}, \code{sample2_dict.xml}, \code{sample3_dict.xml}, \code{sample3_dict_EMPI.xml},
-#'    \code{EEG_bipolar_filtered.xml}, \code{sample1_dict_one_block.xml}
+#'    \item \code{sample1.xml}, \code{sample2.xml}, \code{sample3.xml}, \code{sample3_EMPI.xml},
+#'    \code{EEG_filter_resample_montage.xml}, \code{one_block.xml}, \code{00001_lr.xml}
 #'      \itemize{
 #'        \item XML files describing a multiscale Gabor dictionary.
 #'        \item such files can be generated from the EMPI program executed with the \code{--dictionary-output}
 #'        option, which allows you to save (in XML format) data about the dictionary used.
-#'        See the \code{read_dict()} function help page for examples and further details.
+#'        See the \code{read_gabor_dict()} function help page for examples and further details.
 #'      }
 #'  }
 #'

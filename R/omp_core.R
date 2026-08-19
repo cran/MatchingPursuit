@@ -3,8 +3,9 @@
 #' This function implements the Orthogonal Matching Pursuit (OMP) algorithm to
 #' compute a sparse representation of a signal using a dictionary of atoms.
 #' This is an efficient implementation with incremental Cholesky factorization for
-#' efficient least-squares solving. The function works very similarly to the
-#' Python implementation of OMP available in the scikit-learn library.
+#' efficient least-squares solving. The implementation follows the algorithm used
+#' by sklearn.linear_model.OrthogonalMatchingPursuit, including incremental Cholesky
+#' updates for solving the least-squares problem.
 #'
 #' Unlike classical Matching Pursuit, OMP recomputes all selected coefficients
 #' at each iteration by solving a least-squares problem, which generally
@@ -51,15 +52,15 @@
 #' A list containing the result of the Orthogonal Matching Pursuit
 #' decomposition with the following elements:
 #'
-#' \item{gabors}{Matrix of selected atoms (dictionary columns) used in the
+#' \item{selected_atoms}{Matrix of selected atoms (dictionary columns) used in the
 #'   reconstruction.}
 #' \item{original_signal}{The original signal reconstructed as a vector
 #'   (including intercept if \code{fit_intercept = TRUE}).}
 #' \item{reconstruction}{The OMP approximation of the signal including intercept
 #'   (if applicable).}
-#' \item{coef}{Numeric vector of estimated coefficients for selected atoms.}
+#' \item{coefs}{Numeric vector of estimated coefficients for selected atoms.}
 #' \item{energy}{Energy contribution of selected atoms, computed as
-#'   \code{coef^2 * colSums(selected_atoms^2)}.}
+#'   \code{coefs^2 * colSums(selected_atoms^2)}.}
 #' \item{intercept}{Estimated intercept term (0 if \code{fit_intercept = FALSE}).}
 #' \item{support}{Integer vector of selected atom indices.}
 #' \item{residual}{Final residual vector.}
@@ -76,10 +77,10 @@
 #' @export
 #'
 #' @seealso
-#' \code{\link{read_dict}},
+#' \code{\link{read_gabor_dict}},
 #' \code{\link{topk_atoms}},
-#' \code{\link{omp_execute}},
-#' \code{\link{run_omp_pipeline}}
+#' \code{\link{mp_omp_execute}},
+#' \code{\link{mp_omp_pipeline}}
 #'
 #' @examples
 #' dictionary <- matrix(
@@ -102,21 +103,61 @@
 #' nrow = 5, byrow = TRUE
 #' )
 #'
-#' # set 'verbose = TRUE' to see the progress
-#'
 #' fit <- omp_core(
 #'   dictionary = dictionary,
 #'   signal = signal,
-#'   channel = 3,
+#'   channel = 1,
 #'   n_nonzero_coefs = 3,
-#'   verbose = FALSE
+#'   fit_intercept = FALSE,
+#'   verbose = TRUE
 #' )
 #'
 #' fit$coef
+#' # [1] 5.282278 2.637693 2.195920
+#'
 #' fit$support
+#' # [1] 9 5 7
 #'
 #' # More realistic example, see omp_execute() examples.
 #'
+#' #--------------------------------------------------------
+#' # Comparison with the Python implementation.
+#' # The results are identical.
+#' #--------------------------------------------------------
+#' # import numpy as np
+#' # from sklearn.linear_model import OrthogonalMatchingPursuit
+#' # from sklearn.preprocessing import normalize
+#'
+#' # import sklearn
+#' # print(sklearn.__version__)
+#' # 1.8.0
+#'
+#' # A = np.array([
+#' #   [ 1.0,  0.9,  0.1,  1.0, -0.2,  0.3,  0.7, -0.5,  1.2,  0.4],
+#' #   [ 0.2,  1.0,  0.8, -0.3,  1.0, -0.6,  0.5,  0.9, -0.1,  0.8],
+#' #   [ 0.0,  0.1,  1.0,  0.5,  0.7,  1.1, -0.4,  0.2,  0.6, -0.7],
+#' #   [ 0.9, -0.2,  0.4,  1.3,  0.1,  0.0,  0.8, -0.9,  0.5,  1.0],
+#' #   [-0.3,  0.6,  1.1, -0.4,  0.2,  0.7, -0.8,  1.0,  0.3,  0.9]
+#' # ])
+#' # A = normalize(A, axis = 0)
+#'
+#' # y = np.array([
+#' #   [4, 3, 5, 2],
+#' #   [2, 1, 2, 3],
+#' #   [3, 2, 4, 1],
+#' #   [5, 4, 3, 2],
+#' #   [1, 3, 2, 4]
+#' # ])
+#'
+#' # omp = OrthogonalMatchingPursuit(n_nonzero_coefs = 3, fit_intercept = False)
+#' # omp.fit(A, y)
+#'
+#' # print(omp.coef_)
+#'
+#' # [[0.   0.   0.         0.   2.63769257 0.    2.19591982 0.  5.28227763 0.        ]
+#' #  [0.   0.   1.93331753 0.   0.         0.    0.         0.  3.65053608 2.21995968]
+#' #  [0.   0.   0.         0.   2.75657594 0.    0.         0.  6.55405854 0.64133666]
+#' #  [0.   0.   3.3515668  0.   0.         0.    0.         0.  0.98551322 2.81352305]]
 #'
 omp_core <- function(
     dictionary,
@@ -128,6 +169,14 @@ omp_core <- function(
     fit_intercept = TRUE,
     verbose = FALSE
 ) {
+
+  if (is.null(channel)) {
+    if (ncol(signal) == 1) {
+      channel <- 1L
+    } else {
+      stop("'channel' must be specified when 'signal' has more than one column.")
+    }
+  }
 
   # Preprocessing
   if (inherits(dictionary, "topk")) {
@@ -154,6 +203,8 @@ omp_core <- function(
 
   sig <- signal[, channel]
   sig <- as.numeric(sig)
+  total_energy <- sum(sig^2)
+  sig_original <- sig
 
   if (length(sig) != n) {
     stop("Dimension mismatch between dictionary and signal.")
@@ -204,9 +255,12 @@ omp_core <- function(
 
   # Outputs
   support <- integer(0)
-  coef <- rep(0, p)
+  coefs <- rep(0, p)
   residual <- sig
   L <- NULL
+
+  relative_residual_energy <- numeric(max_iter + 1)
+  relative_residual_energy[1] <- sum(residual^2) / total_energy
 
   # Main OMP loop
   for (k in 1:max_iter) {
@@ -253,23 +307,24 @@ omp_core <- function(
     x_active <- as.numeric(x_active)
 
     # 4. Build full coefficient vector
-    coef <- rep(0, p)
-    coef[support] <- x_active
+    coefs <- rep(0, p)
+    coefs[support] <- x_active
 
     # 5. Update residual
     residual <- sig - D[, support, drop = FALSE] %*% x_active
 
     # 6. Stopping criterion
     # tol = maximum squared residual norm ||r||^2
+    residual_sq_norm <- sum(residual^2)
+    relative_error <- residual_sq_norm / total_energy
+    relative_residual_energy[k + 1] <- relative_error
+
     if (!is.null(tol)) {
-      residual_sq_norm <- sum(residual^2)
-
-      if (verbose) message("residual norm: ", signif(residual_sq_norm, 6))
-
-      if (residual_sq_norm <= tol) {
+      if (verbose) message("relative residual energy: ", signif(relative_residual_energy[k + 1], 6))
+      if (relative_error <= tol) {
+        message("Convergence achieved in iteration: ", k, "\n")
         break
       }
-
     }
   }
 
@@ -277,7 +332,7 @@ omp_core <- function(
   intercept <- 0
 
   if (fit_intercept) {
-    intercept <- sig_mean - sum(D_mean * coef)
+    intercept <- sig_mean - sum(D_mean * coefs)
   }
 
   # Selected topk atoms
@@ -288,21 +343,22 @@ omp_core <- function(
     position <- dictionary$position[support, channel]
   }
 
-  selected_atoms <- D[, support]
-  coef_selected  <- coef[support]
-  energy <- coef_selected^2 * colSums(selected_atoms^2)
+  selected_atoms <- D[, support, drop = FALSE]
+  coefs_selected  <- coefs[support]
+  energy <- coefs_selected^2 * colSums(selected_atoms^2)
 
   # Output
   if (inherits(dictionary, "topk")) {
     list(
-      gabors = selected_atoms,
-      original_signal = sig + intercept,
-      reconstruction = as.vector(selected_atoms %*% coef_selected + intercept),
-      coef = coef_selected,
+      selected_atoms = selected_atoms,
+      signal = sig_original,
+      reconstruction = as.vector(selected_atoms %*% coefs_selected + intercept),
+      coefs = coefs_selected,
       energy = energy,
       intercept = intercept,
       support = support,
       residual = as.vector(residual),
+      relative_residual_energy = relative_residual_energy[1:(k+1)],
       n_iters = k,
       frequency = frequency,
       phase = phase,
@@ -311,14 +367,15 @@ omp_core <- function(
     )
   } else {
     list(
-      gabors = selected_atoms,
-      original_signal = sig + intercept,
-      reconstruction = as.vector(selected_atoms %*% coef_selected + intercept),
-      coef = coef_selected,
+      selected_atoms = selected_atoms,
+      signal = sig_original,
+      reconstruction = as.vector(selected_atoms %*% coefs_selected + intercept),
+      coefs = coefs_selected,
       energy = energy,
       intercept = intercept,
       support = support,
       residual = as.vector(residual),
+      relative_residual_energy = relative_residual_energy[1:(k+1)],
       n_iters = k
     )
   }

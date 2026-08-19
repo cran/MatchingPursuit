@@ -9,16 +9,17 @@ empi_execute(
   empi_options = NULL,
   write_to_file = FALSE,
   path = NULL,
-  file_name = NULL
+  file_name = NULL,
+  ...
 )
 }
 \arguments{
-\item{signal}{List containing the signal in a data frame together with its sampling frequency.
-The data frame should have meaningful column names (channel names).
-The list must contain elements named \code{"signal"} and \code{"sampling_frequency"}.}
+\item{signal}{An object of class \code{sig} returned by \code{read_csv_signals()},
+an object of class \code{edf} returned by \code{read_edf_signals()},
+or an object of class \code{wfdb} returned by \code{read_wfdb_signals()}.}
 
 \item{empi_options}{If \code{NULL}, the EMPI program is run with
-\code{"-o local --gabor -i 50 --cpu-workers 8"} parameters. Otherwise, the user may specify any command-line
+\code{"-o local --gabor -i 50"} parameters. Otherwise, the user may specify any command-line
 options. See the \code{README.md} file after downloading the EMPI program using the
 \code{empi_install()} function.}
 
@@ -30,6 +31,9 @@ cache directory. This file stores the results of signal decomposition using the 
 If \code{NULL}, the file will be saved in the cache directory.}
 
 \item{file_name}{Name of the file to create if \code{write_to_file = TRUE}.}
+
+\item{...}{Additional arguments passed to \code{system()} when executing
+EMPI, such as \code{ignore.stdout = TRUE} or \code{ignore.stderr = TRUE}.}
 }
 \value{
 Results of signal decomposition using the MP algorithm. An object of class
@@ -37,11 +41,11 @@ Results of signal decomposition using the MP algorithm. An object of class
 to a SQLite file in the \code{path} directory.
 
 \item{atoms}{A data frame describing the selected atoms.}
-\item{original_signal}{Matrix containing the original signal(s).}
+\item{signal}{Matrix containing the original signal(s).}
 \item{reconstruction}{Matrix containing the reconstructed signal(s).}
-\item{gabors}{List of matrices containing selected atoms for each channel.}
-\item{t}{Time vector corresponding to signal samples.}
-\item{sf}{Sampling frequency.}
+\item{selected_atoms}{List of matrices containing selected atoms for each channel.}
+\item{time}{Time vector corresponding to signal samples.}
+\item{sampling_frequency}{Sampling frequency.}
 }
 \description{
 Runs the EMPI program for the given data (signal).
@@ -66,7 +70,22 @@ out_empi <- empi_execute(
   file_name = NULL
 )
 
-plot(out_empi)
+# Default EMPI options have been changed. For details, see the EMPI README.md file.
+out_empi <- empi_execute(
+  signal = out,
+  empi_options = "-o none --full-atoms-in-signal -i 50 --gabor",
+  write_to_file = FALSE,
+  path = NULL,
+  file_name = NULL
+)
+
+plot(out_empi, freq_divide = 4)
 }
 
+}
+\seealso{
+\code{\link{empi_check}},
+\code{\link{empi_install}},
+\code{\link{empi_locate}},
+\code{\link{plot.mp}}
 }

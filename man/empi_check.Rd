@@ -2,13 +2,14 @@
 % Please edit documentation in R/empi_check.R
 \name{empi_check}
 \alias{empi_check}
-\title{Checks if EMPI external software is installed}
+\title{Check whether EMPI is installed}
 \usage{
 empi_check()
 }
 \value{
-If the EMPI program is found, its full path is returned. Otherwise, a message is displayed,
-prompting the user to install it using the \code{empi_install()} function.
+A character string containing the full path to the EMPI executable if found.
+If EMPI is not available, invisibly returns \code{NULL} and displays a
+message suggesting installation with \code{empi_install()}.
 }
 \description{
 The EMPI program is installed using the \code{empi_install()} function and stored in the
@@ -16,6 +17,14 @@ cache directory. This function checks whether the EMPI program is still availabl
 (users have full access to the cache directory and may remove its contents at any time).
 }
 \examples{
-empi_check()
+if (interactive()) {
+  empi_check()
+}
 
+}
+\seealso{
+\code{\link{empi_install}},
+\code{\link{empi_locate}},
+\code{\link{empi_execute}},
+\code{\link{plot.mp}}
 }

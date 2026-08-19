@@ -1,17 +1,26 @@
-#' Checks if EMPI external software is installed
+#' Check whether EMPI is installed
 #'
 #' The EMPI program is installed using the \code{empi_install()} function and stored in the
 #' cache directory. This function checks whether the EMPI program is still available there
 #' (users have full access to the cache directory and may remove its contents at any time).
 #'
 #' @return
-#' If the EMPI program is found, its full path is returned. Otherwise, a message is displayed,
-#' prompting the user to install it using the \code{empi_install()} function.
+#' A character string containing the full path to the EMPI executable if found.
+#' If EMPI is not available, invisibly returns \code{NULL} and displays a
+#' message suggesting installation with \code{empi_install()}.
+#'
+#' @seealso
+#' \code{\link{empi_install}},
+#' \code{\link{empi_locate}},
+#' \code{\link{empi_execute}},
+#' \code{\link{plot.mp}}
 #'
 #' @export
 #'
 #' @examples
-#' empi_check()
+#' if (interactive()) {
+#'   empi_check()
+#' }
 #'
 empi_check <- function() {
 
@@ -29,5 +38,10 @@ empi_check <- function() {
     return(exec_path)
   }
 
-  message("The EMPI tool is not available. Run empi_install() to install it.")
+  message(
+    "The EMPI tool is not installed. ",
+    "Run empi_install() if you want to install it."
+  )
+
+  return(invisible(NULL))
 }

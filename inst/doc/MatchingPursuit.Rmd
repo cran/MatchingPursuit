@@ -100,15 +100,23 @@ the Matching Pursuit (MP) and Orthogonal Matching Pursuit (OMP) algorithms
 it supports working with EEG (electroencephalogram) and ECG (electrocardiograph) 
 signals. The functionality of the package includes:
 
-1.  Loading files in EDF and EDF+ formats
-2.  Loading files in the WFDB (WaveForm DataBase) format
-3.  Performing three standard EEG montages (bipolar, referential, and average)
-4.  Pre-filtering signals using notch, low-pass, high-pass, band-pass, and band-stop filters 
-5.  Plotting signals
-6.  Executing the Matching Pursuit (MP) algorithm
-7.  Loading an XML-base atom dictionary 
-8.  Executing the Orthogonal Matching Pursuit (OMP) algorithm
-9.  Plotting time–frequency maps based on MP and OMP results
+1. Execution of the Matching Pursuit algorithm  
+    - optimized C++ backend, Enhanced Matching Pursuit Implementation (**EMPI**)  
+    - reference R implementation (**MP**)  
+2. Execution of the Orthogonal Matching Pursuit **(OMP)** algorithm  
+3. Support for Gabor dictionaries via XML-based atom definitions  
+4. Support for biomedical signal formats  
+    - EDF and EDF+ file support  
+    - WFDB record support  
+    - Standard EEG montages(bipolar, referential, average-reference)  
+5. Visualization of time–frequency maps based on MP, OMP, and EMPI results  
+6. Signal pre-processing using notch, low-pass, high-pass, band-pass and band-stop filters  
+
+## Naming convention
+In this vignette, we use the following naming convention:
+
+- The terms **MP-R** and **OMP-R** with a suffix **R** refer to the corresponding backends rather than to algorithms. The terms **MP** and **OMP** without a suffix **R** refer to the corresponding algorithms rather than to a specific implementation.
+- **EMPI** refers to the external backend implementing the Matching Pursuit algorithm, developed by Piotr T. Różański and available on [GitHub](https://github.com/develancer/empi).
 
 [Back to menu](#top)
 
@@ -176,8 +184,6 @@ signal <- read_csv_signals(file)
 str(signal)
 ```
 
-[Back to menu](#top)
-
 ### Step 2 {.unnumbered}
 
 The input data (`signal`) is passed as an argument to the
@@ -217,8 +223,6 @@ to find 25 atoms.
 # )
 ```
 
-[Back to menu](#top)
-
 ### Step 3 {.unnumbered}
 
 It is now time to generate the final time-frequency (T-F) map for the
@@ -244,7 +248,7 @@ the energy of the reconstructed signal closer to 100%.
 # Reading a SQLite file in which all generated atom parameters are stored.
 file <- system.file("extdata", "sample1.db", package = "MatchingPursuit")
 
-# Create time-frequency map based on MP atoms.
+# Create time-frequency map based on atoms.
 out <- tf_map(
   x = file,
   channel = 1,
@@ -296,12 +300,40 @@ standard names.
 file <- system.file("extdata", "EEG.edf", package = "MatchingPursuit")
 
 # Read signal parameters and display them in a tabular form.
-read_edf_params(file)
+eeg <- read_edf_signals(file)
+signal_eeg <- eeg$signal
+sampling_frequency <- eeg$sampling_frequency
+time <- seq(0, nrow(signal_eeg) - 1) / sampling_frequency
 ```
 
-[Back to menu](#top)
+### Step 2 (usually required) {.unnumbered}
 
-### Step 2 (sometimes required) {.unnumbered}
+EEG signals are rarely analyzed without prior filtering. Using the
+`design_filters()` function, you can define the filter parameters and
+then apply the filter to the signal. The filter parameters listed below
+use typical values recommended in the literature for EEG signal
+analysis.
+
+```{r eeg_filtering, include = TRUE, echo = TRUE, warning = FALSE}
+# Filter parameters that will be used (quite typical in filtering EEG signals).
+fc <- design_filters(
+   sampling_frequency = sampling_frequency,
+   notch = c(49, 51),
+   lowpass = 40,
+   highpass = 1,
+)
+
+# Filtering input signals.
+signal_eeg_f <- signal_eeg
+
+for (m in 1:ncol(signal_eeg_f)) {
+  signal_eeg_f[, m] = signal::filtfilt(fc$notch, signal_eeg[, m])      # 50Hz notch filter
+  signal_eeg_f[, m] = signal::filtfilt(fc$lowpass, signal_eeg_f[, m])  # Low pass IIR Butterworth
+  signal_eeg_f[, m] = signal::filtfilt(fc$highpass, signal_eeg_f[, m]) # High pass IIR Butterwoth
+}
+```
+
+### Step 3 (sometimes required) {.unnumbered}
 
 Sometimes it is necessary to change the sampling frequency (increase —
 *upsampling* or decrease — *downsampling*). The `read_edf_signals()`
@@ -309,50 +341,63 @@ function provides this functionality. In the example below, the original
 sampling frequency is reduced from 256 Hz to 64 Hz.
 
 ```{r read_edf_signal_resampling, include = TRUE, echo = TRUE, warning = FALSE}
-# Original signal
-eeg <- read_edf_signals(file, resampling = FALSE, from = 0, to = 10)
-signal_eeg <- eeg$signal
-sampling_frequency <- eeg$sampling_frequency
-sampling_frequency
-
-# Resampled signal
-eeg_resampled <- read_edf_signals(file, resampling = TRUE, sf_new = 64, from = 0, to = 10)
-signal_eeg_r <- eeg_resampled$signal
-sampling_frequency_r <- eeg_resampled$sampling_frequency
-sampling_frequency_r
+signal_eeg_f_r <- resample_signal(signal = signal_eeg_f, p = 1, q = 4)
+time_64 <- seq(0, nrow(signal_eeg_f_r) - 1) / (sampling_frequency / 4)
+sampling_frequency_r <- 64
 ```
 
-```{r sampling.results, include = TRUE, echo = FALSE, warning = FALSE, fig.width = 7, fig.height = 4}
-par(mfrow = c(2, 1), pty = "m", mai = c(0.8, 0.5, 0.5, 0.5))
+The effect of the preprocessing (filtering and resampling) is illustrated below. 
+Although filtering removes baseline drift and high-frequency noise and downsampling 
+reduces the sampling frequency, the overall morphology of the EEG waveform is well preserved.
 
-# Not-filtered signal (raw signal).
+```{r filtering_and__resampling_plot, include = TRUE, echo = FALSE, warning = FALSE, fig.width = 7, fig.height = 5}
+old_par <- par("mfrow", "mai", "mgp")
+par(mfrow = c(3, 1), pty = "m", mai = c(0.35, 0.5, 0.4, 0.1), mgp = c(1.5, 0.5, 0))
+
+rg <- range(c(signal_eeg[, 1], signal_eeg_f[, 1], signal_eeg_f_r[, 1]))
+
 plot(
+  time,
   signal_eeg[, 1],
   type = "l",
-  panel_first = grid(),
-  main = "Original signal (256 Hz), channel #1",
-  xlab = "sample points",
-  ylab = "",
-  col = "blue"
+  xlab = "Time (s)",
+  ylab = "Amplitude",
+  main = "Original EEG signal, channel Fp1",
+  col = "blue",
+  ylim = rg,
+  panel.first = grid()
 )
+abline(h = 0, col = "gray")
 
-# Signal after filtering.
 plot(
-  signal_eeg_r[, 1],
+  time,
+  signal_eeg_f[, 1],
   type = "l",
-  panel_first = grid(),
-  main = "Signal after downsampling (64 Hz), channel #1",
-  xlab = "sample points",
-  ylab = "",
-  col = "blue"
+  xlab = "Time (s)",
+  ylab = "Amplitude",
+  main = "Filtered EEG signal, channel Fp1",
+  col = "blue",
+  ylim = rg,
+  panel.first = grid()
 )
+abline(h = 0, col = "gray")
 
+plot(
+  time_64,
+  signal_eeg_f_r[, 1],
+  type = "l",
+  xlab = "Time (s)",
+  ylab = "Amplitude",
+  main = "Filtered and downsampled EEG signal (64 Hz), channel Fp1",
+  col = "blue",
+  ylim = rg,
+  panel.first = grid()
+)
+abline(h = 0, col = "gray")
 par(old_par)
 ```
 
-[Back to menu](#top)
-
-### Step 3 (usually required) {.unnumbered}
+### Step 4 (usually required) {.unnumbered}
 
 A bipolar montage is created (the classical *double banana* montage),
 where each channel compares two adjacent electrodes. In the first step,
@@ -369,82 +414,18 @@ pairs <- list(
 )
 
 # Make the bipolar montage.
-eeg_m <- eeg_montage(eeg, montage_type = c("bipolar"), bipolar_pairs = pairs)
-signal_eeg_m <- eeg_m$signal
+signal_eeg_f_r_m <- eeg_montage(
+  signal_eeg_f_r,
+  montage_type = c("bipolar"),
+  bipolar_pairs = pairs
+)
 
 # Original signal (first 6 rows, first 6 channels).
-signal_eeg[1:6, 1:6]
+signal_eeg_f_r[1:6, 1:6]
 
 # Signal after banana montage (first 6 rows, first 6 channels).
-signal_eeg_m[1:6, 1:6]
-
+signal_eeg_f_r_m[1:6, 1:6]
 ```
-
-[Back to menu](#top)
-
-### Step 4 (usually required) {.unnumbered}
-
-EEG signals are rarely analyzed without prior filtering. Using the
-`filters_coeff()` function, you can define the filter parameters and
-then apply the filter to the signal. The filter parameters listed below
-use typical values recommended in the literature for EEG signal
-analysis.
-
-```{r eeg_filtering, include = TRUE, echo = TRUE, warning = FALSE}
-# Filter parameters that will be used (quite typical in filtering EEG signals).
-fc <- filters_coeff(
-   sf = sampling_frequency,
-   notch = c(49, 51),
-   lowpass = 40,
-   highpass = 1,
-)
-
-# Filtering input signals.
-signal_eeg_m_f <- signal_eeg_m
-
-for (m in 1:ncol(signal_eeg_m)) {
-  signal_eeg_m_f[, m] = signal::filtfilt(fc$notch, signal_eeg_m[, m])      # 50Hz notch filter
-  signal_eeg_m_f[, m] = signal::filtfilt(fc$lowpass, signal_eeg_m_f[, m])  # Low pass IIR Butterworth
-  signal_eeg_m_f[, m] = signal::filtfilt(fc$highpass, signal_eeg_m_f[, m]) # High pass IIR Butterwoth
-}
-```
-
-For the selected channel (after the bipolar montage, it is named
-`r ch <- 1; colnames(signal_eeg_m_f)[ch]`), both the original and
-filtered signals are displayed. The effect of filtering is clearly
-beneficial, as noise—typically without diagnostic significance—has been
-removed from the signal.
-
-```{r no_filtering_and_filtering_plot, include = TRUE, echo = FALSE, warning = FALSE, fig.width = 7, fig.height = 4}
-ch <- 1
-par(mfrow = c(2, 1), pty = "m", mai = c(0.8, 0.5, 0.5, 0.5))
-
-# Not-filtered signal (raw signal).
-plot(
-  signal_eeg_m[, ch],
-  type = "l",
-  panel_first = grid(),
-  main = paste(colnames(signal_eeg_m)[ch], " (raw signal, channel #1)", sep = ""),
-  xlab = "sample points",
-  ylab = "",
-  col = "blue"
-)
-
-# Signal after filtering.
-plot(
-  signal_eeg_m_f[, ch],
-  type = "l",
-  panel.first = grid(),
-  main = paste(colnames(signal_eeg_m)[ch], " (filtered signal, channel #1)", sep = ""),
-  xlab = "sample points",
-  ylab = "",
-  col = "blue"
-)
-
-par(old_par)
-```
-
-[Back to menu](#top)
 
 ### Step 5 {.unnumbered}
 
@@ -455,22 +436,21 @@ explanation given [here](#important_note).
 # The empi_options parameter is NULL, so the EMPI program is 
 # run with the parameters "-o local --gabor -i 50"
 
-# sig <- list(signal_eeg_m_f, sampling_frequency)
-# names(sig) <- c("signal", "sampling_frequency")
+# sig <- as_sig(signal_eeg_f_r_m, sampling_frequency_r)
 
 # empi_class <- empi_execute (
 #   signal = sig,
 #   empi_options = NULL,
 #   write_to_file = TRUE,
 #   path = NULL,
-#   file_name = "EEG_bipolar_filtered.db"
+#   file_name = "EEG_filter_resample_montage.db"
 # )
 ```
 
 ### Step 6 {.unnumbered}
 
 Generating the final time-frequency map for the selected channel
-(`r ch <- 1; colnames(signal_eeg_m_f)[ch]`). The centers of atoms (in
+(`r ch <- 1; colnames(signal_eeg_f_r_m)[ch]`). The centers of atoms (in
 the sense of time and frequency coordinates) are now marked with white
 crosses.
 
@@ -488,9 +468,9 @@ by the generated atoms.
 
 ```{r eeg_tf_map, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
 # Reading a SQLite file where all the generated atom's parameters are stored.
-file <- system.file("extdata", "EEG_bipolar_filtered.db", package = "MatchingPursuit")
+file <- system.file("extdata", "EEG_filter_resample_montage.db", package = "MatchingPursuit")
 
-# Generate time-frequency map based on MP atoms.
+# Generate time-frequency map based on atoms.
 out <- tf_map(
   x = file,
   channel = 2,
@@ -504,22 +484,35 @@ out <- tf_map(
 
 ### Step 7 (optional) {.unnumbered}
 
-The package also includes a function for displaying EEG signals. To do
-this, you can use `plot_eeg()`, the `S3` method for the generic `plot()`
-function. This function requires an object of class `edf`, created with
-`read_edf_signals()`.
+The package also provides the `plot.edf()` function, an S3 method for 
+`plot()` function, for visualization of multichannel EEG recordings. The 
+function accepts an object of class `edf` returned by `read_edf_signals()` 
+and displays the selected time interval using a conventional stacked EEG layout.
 
-`panel_height` parameter controls the vertical distance between
-individual signals. If `NULL`, its value is set automatically so that
-all signals are clearly visible and do not overlap. The calculated value
-of parameter `panel_height` is displayed below the figure.
+Since the preprocessing functions are designed to operate on generic multichannel 
+signal matrices, they are independent of the `edf` class and can be applied to 
+signals imported from different file formats. Therefore, before using `plot.edf()`, 
+the processed signals are combined with the corresponding metadata into an object 
+of class `edf`.
 
-```{r plot_eeg_filt, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-temp <- eeg_m
-temp$signal <- signal_eeg_m_f
+The `panel_height` argument controls the vertical spacing between adjacent channels. 
+If `NULL`, an appropriate value is determined automatically to prevent overlap 
+between signals. The selected value is reported in the R console.
+
+```{r plot_eeg_filt_resamp_mont, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
+edf_processed <- structure(
+  list(
+    signal = as.data.frame(signal_eeg_f_r_m),
+    sampling_frequency = sampling_frequency_r,
+    time = time_64,
+    signal_names = colnames(signal_eeg_f_r_m),
+    record_name = basename(file)
+  ),
+  class = "edf"
+)
 
 plot(
-  x = temp,
+  x = edf_processed,
   begin = 0,
   end = 10,
   panel_height = NULL,
@@ -527,20 +520,16 @@ plot(
   bg_colour = "white",
   txt_col = "blue",
   zero_line = TRUE,
-  main = "EEG.edf file after banana montage and after filtering"
+  main = "EEG after filtering, resampling, and double banana montage"
 )
 ```
 
-In the next example, we show a plot of the same EEG signal as above.
-However, this time, we display the unfiltered version. Undesirable
-artifacts (noise and drift) are clearly visible.
+The same approach can be used to visualize the original EEG recording before filtering, resampling, and montage construction.
 
-```{r plot_eeg_no_filt, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-temp <- eeg_m
-temp$signal <- signal_eeg_m
+```{r plot_orig_eeg, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
 
 plot(
-  x = temp,
+  x = eeg,
   begin = 0,
   end = 10,
   panel_height = NULL,
@@ -548,7 +537,7 @@ plot(
   bg_colour = "white",
   txt_col = "blue",
   zero_line = TRUE,
-  main = "EEG.edf file after banana montage and after filtering"
+  main = "Original EEG before preprocessing"
 )
 ```
 
@@ -569,10 +558,10 @@ Reading an example ECG signal (`.dat` and `.hea` files). The signal is
 Hz. The channels have standard names. The data comes from the repository
 available at [PhysioNet](https://physionet.org/content/ptb-xl/1.0.3/).
 
-```{r read_ecg_signals, include = TRUE, echo = TRUE, warning = FALSE}
+```{r read_wfdb_signals, include = TRUE, echo = TRUE, warning = FALSE}
 file <- system.file("extdata", "00001_lr.hea", package = "MatchingPursuit")
 
-out_ecg <- read_ecg_signals(file)
+out_ecg <- read_wfdb_signals(file)
 
 head(out_ecg$signals)
 out_ecg$sampling_frequency
@@ -582,7 +571,7 @@ out_ecg$record_name
 
 ```{r ecg_signal, include = TRUE, echo = TRUE, warning = FALSE}
 # Create a list compatible with the empi_execute() function.
-signal <- list(
+signal <- as_sig(
   signal = data.frame(out_ecg$signal),
   sampling_frequency = out_ecg$sampling_frequency
 )
@@ -617,7 +606,7 @@ selected channel.
 # Reading a SQLite file in which all generated atom parameters are stored.
 file <- system.file("extdata", "00001_lr.db", package = "MatchingPursuit")
 
-# Create time-frequency map based on MP atoms.
+# Create time-frequency map based on atoms.
 out <- tf_map(
   x = file,
   channel = 2,
@@ -630,9 +619,9 @@ out <- tf_map(
 The package also includes a function for displaying ECG signals in a
 layout corresponding to standard paper ECG printouts. A typical ECG
 paper layout was used, with a small grid of `0.04 s × 0.1 mV` and a
-large grid of `0.20 s × 0.5 mV`. To do this, you can use `plot_ecg()`,
+large grid of `0.20 s × 0.5 mV`. To do this, you can use `plot.wfdb()`,
 the `S3` method for the generic `plot()` function. This function
-requires an object of class `ecg`, created with `read_ecg_signals()`.
+requires an object of class `ecg`, created with `read_wfdb_signals()`.
 
 ```{r plot_ecg, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
 plot(
@@ -645,6 +634,8 @@ plot(
 )
 
 ```
+
+[Back to menu](#top)
 
 ## One specific example
 
@@ -659,10 +650,10 @@ f <- 128
 t1 = n / f
 t <- seq(from = 0, to = n - 1, by = 1) / f
 
-g1 <- gabor_fun(n, f, mean = 2, phase = 0, sigma = 1, frequency = 50, normalization = F)
-g2 <- gabor_fun(n, f, mean = 8, phase = 0, sigma = 1.5, frequency = 25, normalization = F)
-g3 <- gabor_fun(n, f, mean = 2, phase = 0, sigma = 2, frequency = 30, normalization = F)
-g4 <- gabor_fun(n, f, mean = 7, phase = 0, sigma = 0.5, frequency = 15, normalization = F)
+g1 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 1, frequency = 50, normalization = F)
+g2 <- gabor_atom(n, f, mean = 8, phase = 0, sigma = 1.5, frequency = 25, normalization = F)
+g3 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 2, frequency = 30, normalization = F)
+g4 <- gabor_atom(n, f, mean = 7, phase = 0, sigma = 0.5, frequency = 15, normalization = F)
 imp <- rep(0, n)
 imp[n / 2] <- 4
 sine <- 0.2 * sin(2 * pi * 3 * t)
@@ -691,9 +682,9 @@ represented clearly and accurately (i.e., blobs for Gabor functions, a
 horizontal line for the sine wave, and a vertical line for the unit
 impulse). However, the chirp signal is decomposed into several separate
 blobs. This behavior arises from the discrete nature of the atom
-dictionary used in the MP algorithm, which prevents a continuous
+dictionary used in the Matching Pursuit algorithm, which prevents a continuous
 representation of a signal with smoothly varying frequency. This
-limitation (and, in some respects, a drawback) of the MP algorithm
+limitation (and, in some respects, a drawback) of the Matching Pursuit algorithm
 should be taken into account.
 
 ```{r chirp_plot_tf, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 6}
@@ -723,23 +714,24 @@ so-called atoms. (the text below is adapted from @Kunik-2025).
 
 Given a signal $f \in \mathbb{R}^n$, and a (possibly overcomplete) large
 redundant dictionary $D =\{g_{\gamma}\}_{\gamma \in \Gamma}$ of
-normalized atoms $\|g_{\gamma}\|=1$ MP finds a sparse signal
+normalized atoms $\|g_{\gamma}\|=1$ Matching Pursuit finds a sparse signal
 representation
 
 $$
-f \approx \sum_{n = 0}^{N} a_n g_{\gamma_n}
+f \approx \sum_{n = 0}^{N-1} a_n g_{\gamma_n},
 \tag{1}
-$$ where $a_n \in \mathbb{R}$ are coefficients, $g_{\gamma_n} \in D$ are
+$$ 
+where $a_n \in \mathbb{R}$ are coefficients, $g_{\gamma_n} \in D$ are
 atoms selected from the dictionary and $N$ is the desired number of
-iterations (or stopping threshold). In most practical cases \$ N
-\ll size(D)\$. Also, $g_{\gamma}$ is the dictionary atom indexed by
-$\gamma$ and $\Gamma$ is the set of all indices in the directory.
+iterations (or stopping threshold). In most practical cases $N
+\ll size(D)$. Also, $g_{\gamma}$ is the dictionary atom indexed by
+$\gamma$ and $\Gamma$ is the set of all indices in the dictionary.
 
 In the ideal case, the linear expansion (1) should include all atoms
 $g_{\gamma_n}$ that represent the relevant structures of the signal $f$.
 For real signals, such an ideal scenario is rarely possible, and some
 form of approximation is required. This task can be accomplished
-elegantly using the MP algorithm, which was first proposed by
+elegantly using the Matching Pursuit algorithm, which was first proposed by
 @Mallat-1993 in the context of signal processing.
 
 Each atom $g_{\gamma}$ is typically a time-frequency shifted, scaled
@@ -751,7 +743,7 @@ real-valued Gabor function has the following form:
 $$
 g_{\gamma}(t) = 
 K(\gamma) e^{- \pi \left( \frac{t-\mu}{\sigma} \right) ^2}
-\cos(\omega (t - \mu) + \phi) \tag{2}
+\cos(\omega (t - \mu) + \phi), \tag{2}
 $$
 
 where $\gamma = (\mu, \omega, \sigma, \phi)$ constitute a
@@ -764,7 +756,7 @@ depending on their parameters. A few examples of Gabor function are
 presented in figure below (in blue). The sinusoidal plane wave (in gray)
 is modulated by a Gaussian envelope (in red).
 
-```{r Gabor_fun, include = TRUE, echo = FALSE, fig.width = 7, fig.height = 5, fig.align = 'center'}
+```{r gabor_atom, include = TRUE, echo = FALSE, fig.width = 7, fig.height = 5, fig.align = 'center'}
 N <- 512
 fs <- 256
 # normalization = T --> signal's norm = 1
@@ -794,7 +786,7 @@ for (i in c(1:n)) {
     )
   )
   
-  gb <- gabor_fun(N, fs, mean, phase, sigma, frequency, normalization = F)
+  gb <- gabor_atom(N, fs, mean, phase, sigma, frequency, normalization = F)
 
   plot(
     gb$t, 
@@ -803,7 +795,7 @@ for (i in c(1:n)) {
     xaxt = "t", yaxt = "t", bty = "or",
     cex.axis = 1, lwd = 2,
     main = main)
-  lines(gb$t, gb$cosinus, type = "l", col = "grey")
+  lines(gb$t, gb$cosine, type = "l", col = "grey")
   lines(gb$t, gb$gabor, col="blue", lwd = 2)
   
   s <- s + gb$gabor
@@ -812,7 +804,7 @@ for (i in c(1:n)) {
 par(old_par)
 ```
 
-In the MP algorithm, the decomposition process is iterative. At each
+In the Matching Pursuit algorithm, the decomposition process is iterative. At each
 step, the algorithm selects an atom $g_{\gamma_n}$ from the dictionary
 $D$ that best matches the current residual signal $R$. Formally,
 starting with the signal $f$ at iteration $n=0$ the initial residual and
@@ -824,15 +816,15 @@ $$
 and 
 
 $$
-f^0 = 0 \tag{4}
+f^0 = 0. \tag{4}
 $$ 
 
-For each iteration $n = \{0,1,\ldots, N\}$ we find
+For each iteration $n = \{0,1,\ldots, N-1\}$ we find
 $g_{\gamma_n} \in D$ such that the following inner product
 $\langle \cdot, \cdot \rangle$ is maximized
 
 $$
-g_{\gamma_n} = \operatorname*{arg\,min}_{\gamma \in \Gamma} | \langle R^{n}, g_{\gamma} \rangle | \tag{5}
+g_{\gamma_n} = \operatorname*{arg\,max}_{\gamma \in \Gamma} | \langle R^{n}, g_{\gamma} \rangle |. \tag{5}
 $$ 
 The coefficients $a_n$ in (1) are
 
@@ -843,134 +835,168 @@ $$
 and updated function approximation is defined as
 
 $$
-f^{n+1} = f^{n} + a_n g_{\gamma_n} \tag{7}
+f^{n+1} = f^{n} + a_n g_{\gamma_n}. \tag{7}
 $$ 
 
 Similarly, updated residual is defined as
 
 $$
-R^{n+1} = R^{n} - a_n g_{\gamma_n} \tag{8}
+R^{n+1} = R^{n} - a_n g_{\gamma_n}. \tag{8}
 $$ 
 
 After $N$ iterations, the signal $f$ is approximated as
 
 $$
-f \approx \sum_{n = 0}^{N} \langle R^n,  g_{\gamma_n} \rangle g_{\gamma_n} = \sum_{n = 0}^{N} a_n g_{\gamma_n} \tag{9}
+f \approx \sum_{n = 0}^{N-1} \langle R^n,  g_{\gamma_n} \rangle g_{\gamma_n} = \sum_{n = 0}^{N-1} a_n g_{\gamma_n} \tag{9}
 $$ 
 
 or equivalently
 
 $$
-f = \sum_{n = 0}^{N} \langle R^n   g_{\gamma_n} \rangle g_{\gamma_n} + R^{N+1} \tag{10}
+f = \sum_{n = 0}^{N-1} \langle R^n, g_{\gamma_n} \rangle g_{\gamma_n} + R^{N}. \tag{10}
 $$ 
 
-The procedure stops when $\|R^{n+1}\|$ is below a threshold or after
-a fixed number of iterations.
+The procedure stops when $\|R^{n+1}\|_2$ falls below a predefined
+threshold or when a fixed number of iterations has been reached
 
 It should be noted that finding an optimal approximation (1) is an
 NP-hard problem. A suboptimal solution can be obtained using an
-iterative procedure, such as the MP algorithm. Another key property of
+iterative procedure, such as the MP algorithm. 
+
+Another key property of
 MP is energy conservation: the total energy of the signal is preserved
 in the MP decomposition.
 
-$$
-||f||^2 = \sum_{n = 0}^{N} |\langle R^n,  g_{\gamma_n} \rangle |^2 + ||R^{N+1}||^2 \tag{11}
-$$ 
+Because the selected atoms are normalized, each MP iteration removes an amount of 
+squared $\ell_2$ energy equal to $|\langle R^n,g_{\gamma_n}\rangle|^2$ from the current 
+residual. Consequently, the signal energy can be decomposed as        
 
-[Back to menu](#top)
+
+$$
+||f||^2_2 = \sum_{n = 0}^{N-1} |\langle R^n,  g_{\gamma_n} \rangle |^2 + ||R^{N}||^2_2. \tag{11}
+$$
+
+This identity is sometimes referred to as the energy conservation property of Matching Pursuit.
+
 
 ```{r restore_par, include = FALSE}
 par(old_par)
 ```
 
-## The Orthogonal Matching Pursuit (OMP) in a nutshell
+[Back to menu](#top)
+
+## The Orthogonal Matching Pursuit in a nutshell
 
 The package also provides an implementation of the Orthogonal Matching
-Pursuit (OMP) algorithm. OMP is closely related to Matching Pursuit
-(MP), but differs in the way the approximation coefficients are
-estimated.
+Pursuit (OMP) algorithm. OMP algorithm is closely related to
+MP, but differs in how approximation coefficients are estimated.
 
-In the classical MP algorithm, after selecting an atom, only the
-residual signal is updated (8). Previously selected atoms and their coefficients 
-$a_n$ remain unchanged. and are not recalculated in the next steps.v
+In the classical MP algorithm, after an atom has been selected, only
+the residual signal is updated (8). The previously selected
+atoms and their coefficients remain unchanged and are not re-estimated
+in subsequent iterations.
 
-OMP addresses this limitation by recomputing the coefficients $a_n$ of all
-selected atoms after each iteration. This makes the residue orthogonal to all 
-selected atoms.
+OMP addresses this limitation by recomputing the coefficients of all
+selected atoms after each atom selection. As a result, the new residual is
+orthogonal to the subspace spanned by all selected atoms.
 
-At each iteration, the next atom $g_{\gamma_n}$ is selected according to (5). 
-At this point, a fundamental difference with the MP algorithm appears. 
-The coefficients are obtained from a **least-squares problem**:
+At each iteration, OMP selects the next atom $g_{\gamma_n}$ by
+maximizing its correlation with the current residual, as in
+(7). The crucial difference from MP lies in the
+subsequent estimation of the coefficients. After the new atom has been
+added to the selected set, the coefficients are obtained by solving a
+least-squares problem
+
 
 $$
-a_n = 
+\mathbf{a}^{(n)}
+=
 \operatorname*{arg\,min}_{\mathbf{c}}
 \left\|
 f - D_n \mathbf{c}
-\right\|_2^2
+\right\|_2^2, \tag{12}
 $$
 
-and, assuming $D_n$ has full column rank
-$$
-a_n = (D_n^T D_n)^{-1}D_n^Tf
-$$
+where $D_n$ denotes the matrix whose columns are the atoms selected up to
+and including iteration $n$:
 
-where $D_k$ is the matrix containing the selected atoms. This is the core of OMP.
-Instead of just adding the contribution of the new atom (see (7)), OMP projects the 
-original signal $f$ orthogonally onto the space spanned by all currently selected atoms in $D_n$.
-Because the residual is orthogonal to the span of the selected atoms, a previously selected 
-atom has zero correlation with the residual and therefore cannot be selected again.
-
-Now, the new residual is calculated by subtracting the new approximation from the original signal. 
-The new residual is now completely orthogonal to all columns that have been selected so far
 
 $$
-R^{n+1} = f - D_n a_n
+D_n =
+[g_{\gamma_0},g_{\gamma_1},\ldots,g_{\gamma_n}]. \tag{13}
 $$
 
-Compared with MP, OMP usually provides:
+Assuming that $D_n$ has full column rank, the least-squares solution is
 
-1. more accurate signal reconstruction,
-2. sparser representations,
-3. fewer selected atoms for a comparable approximation quality.
+$$
+\mathbf{a}^{(n)}
+=
+(D_n^T D_n)^{-1}D_n^T f. \tag{14}
+$$
 
-The increased accuracy comes at the cost of higher computational complexity because 
-a least-squares problem must be solved after each iteration. 
-In practical OMP implementations (including ours), the least-squares problem is not 
-solved from scratch at each iteration. Instead, an incremental Cholesky factorization 
-is used to update the solution efficiently.
+This coefficient re-estimation is the core difference between OMP and
+MP. Instead of simply adding the contribution of the newly selected
+atom, as in (7), OMP projects the original signal $f$
+orthogonally onto the subspace spanned by all currently selected atoms.
+
+The new residual is then calculated as
+
+$$
+R^{n+1} = f - D_n \mathbf{a}^{(n)}. \tag{15}
+$$
+
+Because the residual is orthogonal to the span of the selected atoms,
+its correlation with every selected atom is zero. Consequently, a
+previously selected atom cannot be selected again.
+
+Compared with MP, OMP generally provides:
+1. More accurate signal reconstruction for a given number of selected atoms than MP,
+2. Potentially fewer selected atoms for a prescribed reconstruction accuracy,
+3. More stable coefficient estimates in the presence of correlated atoms.
+
+The increased accuracy comes at the cost of higher computational
+complexity because a least-squares problem must be solved after each
+iteration. In practical OMP implementations, including the
+implementation provided by our package, the least-squares problem need
+not be solved from scratch at each iteration. Instead, an incremental
+Cholesky factorization can be used to update the solution efficiently
+as new atoms are added to the selected set.
 
 [Back to menu](#top)
 
-## OMP workflow in the package 
+## Pure R implementation of the MP and OMP algorithms
 
-The OMP implementation uses a three-stage procedure.
+For educational and experimental purposes, the package also provides pure R 
+implementations of the MP and OMP algorithms through the `mp_core()` and `omp_core()` 
+functions, respectively.
+
+The MP-R and OMP-R backends use a three-stage procedure consisting of dictionary 
+generation or import with `read_gabor_dict()`, signal-dependent candidate atom selection with `topk_atoms()`, and sparse decomposition with `mp_omp_execute()`.
 
 ### Step 1 {.unnumbered}
 
 Dictionary generation. A dictionary of candidate Gabor atoms is generated with
-`read_dict()`. The dictionary may contain tens or hundreds of thousands
+`read_gabor_dict()`. The dictionary may contain tens or hundreds of thousands
 of atoms.
 
-**Note:** Strictly speaking, the `read_dict()` function does not create an atom 
+**Note:** Strictly speaking, the `read_gabor_dict()` function does not create an atom 
 dictionary itself. Instead, it reads an XML-based atom dictionary specification 
 that defines the parameters and structure used to construct the dictionary. 
 The format is compatible with the [MPTK program](https://mptk.irisa.fr/)  program 
-and can also be generated by the EMPI program; see Section 13 for details.
+and can also be generated by the EMPI program; see Section 15 for details.
 
-```{r read_dict, include = TRUE, echo = TRUE, warning = FALSE}
-sig_file <- system.file("extdata", "sample3.csv", package = "MatchingPursuit")
-sample3 <- read_csv_signals(sig_file, col_names_in_csv = TRUE)
+```{r read_gabor_dict, include = TRUE, echo = TRUE, warning = FALSE}
+sig_file <- system.file("extdata", "sample1.csv", package = "MatchingPursuit")
+signal <- read_csv_signals(sig_file, col_names_in_csv = FALSE)
 
-signal <- sample3$signal
-sf <- sample3$sampling_frequency
-duration <- nrow(sample3$signal) / sf
+sampling_frequency <- signal$sampling_frequency
+duration <- nrow(signal$signal) / sampling_frequency
 
-xml_file <- system.file("extdata", "sample3_dict.xml", package = "MatchingPursuit")
+xml_file <- system.file("extdata", "sample1.xml", package = "MatchingPursuit")
 
-atoms_dict <- read_dict(
+atoms_dict <- read_gabor_dict(
   xml_file, 
-  sf, 
+  sampling_frequency, 
   duration, 
   verbose = TRUE)
 ```
@@ -985,7 +1011,6 @@ with the highest similarities to the analysed signal.
 dict_topk <- topk_atoms(
   atoms_dict = atoms_dict,
   signal = signal,
-  sf = sf,
   topk = 5000,
   verbose = TRUE
 )
@@ -997,13 +1022,13 @@ Gabor atoms with optimal phase estimates.
 
 ### Step 3 {.unnumbered}
 
-OMP decomposition. The reduced dictionary is passed to `omp_execute()` function.
+OMP decomposition. The reduced dictionary is passed to `mp_omp_execute()` function.
 
 ```{r omp_execution, include = TRUE, echo = TRUE, warning = FALSE}
-fit <- omp_execute(
+fit <- mp_omp_execute(
+  mode = 'omp',          # or "mp" for classical Matching Pursuit
   dictionary = dict_topk,
   signal = signal,
-  sf = sf,
   n_nonzero_coefs = 50,
   verbose = TRUE
 )
@@ -1012,20 +1037,26 @@ fit <- omp_execute(
 ### Step 4 {.unnumbered}
 
 The result is an object of class `mp`, making it fully compatible with
-the same visualization functions used for MP decompositions:
+the same visualization functions used for Matching Pursuit decompositions:
 
 ```{r omp_plot, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-plot(fit, channel = 3)
+plot(
+  fit, 
+  channel = 1, 
+  freq_divide = 4
+)
+
 ```
 
 ### Combine steps 1–4 into a single pipeline {.unnumbered}
 
-For simplicity, all four steps described above have been encapsulated in a single function, `run_omp_pipeline()`, which returns an object of class `mp`.
+For simplicity, all four steps described above have been encapsulated in a single function, `mp_omp_pipeline()`, which returns an object of class `mp`.
 
-```{r run_omp_pipline, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-out <- run_omp_pipeline(
+```{r mp_omp_pipeline, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
+out <- mp_omp_pipeline(
+   mode = 'omp',          # or "mp" for classical Matching Pursuit
    sig_file = sig_file,
-   col_names_in_csv = TRUE,
+   col_names_in_csv = FALSE,
    xml_file = xml_file,
    topk = 5000,
    n_nonzero_coefs = 50,
@@ -1035,13 +1066,15 @@ out <- run_omp_pipeline(
  class(out)
 ```
 
-## Relationship between OMP and EMPI
+[Back to menu](#top)
+
+## Relationship between MP-R / OMP-R and EMPI backends
 
 The `topk_atoms()` function is designed to work with dictionaries exported from 
-the EMPI program. Dictionaries generated by EMPI can be read using `read_dict()` 
-and subsequently used as input for `topk_atoms()` and `omp_execute()`.
+the EMPI program. Dictionaries generated by EMPI can be read using `read_gabor_dict()` 
+and subsequently used as input for `topk_atoms()` and `mp_omp_execute()`.
 
-For meaningful comparisons between MP results generated by EMPI and OMP
+For meaningful comparisons between results generated by EMPI and MP-R/OMP-R
 results generated in R, it is recommended to run EMPI with the options
 
 `-o none --full-atoms-in-signal`
@@ -1050,16 +1083,47 @@ which disable additional EMPI-specific optimization procedures and force
 generation of complete atoms within the analyzed signal. Details of
 these options can be found in the EMPI documentation (`README.md` file).
 
-Summarising, the typical workflow is as follows:
+The external EMPI program is a multi-threaded C++ implementation of the Matching Pursuit
+algorithm with GPU support and CPU parallelization. The implementation supports optimal 
+dictionaries, including the simulation of continuous (quasi-infinite) dictionaries 
+(switch `-o global`). By default, atoms are allowed to extend beyond the signal boundaries, 
+with the signal assumed to be zero outside its observed range. This behavior can be 
+changed using the `--full-atoms-in-signal` switch, which restricts atoms to lie entirely 
+within the signal. 
 
-`read_dict()` $\rightarrow$ 
-`topk_atoms()` $\rightarrow$
-`omp_execute()` $\rightarrow$
-`plot()`/`tf_map()`
+The diagram below illustrates the three main workflows for running the MP-R, OMP-R, and EMPI backends.
+ 
+```
+                                       START
+                                         |
+                      -----------------------------------------
+                      |                                       |
+           MP-R / OMP-R workflow                         EMPI workflow
+                      |                                       | 
+         ---------------------------                          |            
+         |                         |                          | 
+ mp_omp_pipeline()         read_*_signals()            read_*_signals()
+         |                         │                          │
+         |                 read_gabor_dict()                  |             
+         |                         │                          │
+         |                   topk_atoms()                     │
+         |                         │                          │
+         |                 mp_omp_execute()             empi_execute()
+         |                         |                          |
+         ---------------------------                          |
+                     |                                        |
+                     ------------------------------------------
+                                          |
+                                   plot() / tf_map()                                   
+                                   
+read_*_signals() - select the appropriate function depending on the file format:
+read_csv_signals(), read_edf_signals(), read_wfdb_signals()
+
+```                
 
 [Back to menu](#top)
 
-## XML-base atom dictionary specification
+## XML-based atom dictionary specification
 
 The XML file encodes the structure of a dictionary of basis functions (Gabor atoms), including window lengths, window shifts, and frequency grids used during signal analysis.
 A simple example illustrates how atom parameters are encoded in the XML file. Consider the following **block**:
@@ -1086,7 +1150,7 @@ Assume that the analyzed signal is sampled at $1\;024$ Hz and has a duration of 
 With a shift of one sample ($S = 1$), the number of possible window positions is
 
 $$
-N_{\text{windows}} = N - L + 1 = 1\;024 - 17 + 1 = 1\;008.
+N_{\text{windows}} = N - L + 1 = 1\;024 - 17 + 1 = 1\;008
 $$
 
 ### Number of frequency bins {.unnumbered}
@@ -1095,7 +1159,7 @@ $$
 For an FFT size of $32$, the number of positive frequency bins is
 
 $$
-N_{\text{freq}} = \frac{32}{2} = 16.
+N_{\text{freq}} = \frac{32}{2} = 16
 $$
 Only positive frequencies are considered, excluding the Nyquist component. $512$ is omitted, so we have $16$ different frequencies. Therefore, the frequencies are:
 
@@ -1108,7 +1172,7 @@ $$
 
 $$
 N_{\text{atoms}} = N_{\text{windows}} \times N_{\text{freq}}
-= 1\;008 \times 16 = 16\;128.
+= 1\;008 \times 16 = 16\;128
 $$
 
 In other words, for each of the $1\;008$ possible positions of the $17$-sample window, $16$ atoms corresponding to different FFT frequencies are generated.
@@ -1227,4 +1291,29 @@ In summary, the dictionary provides an approximately uniform coverage of the tim
 
 [Back to menu](#top)
 
-## Bibliogaphy
+## XML-based atom dictionary generator
+
+The package includes a utility for generating XML-based atom dictionaries
+for MPTK-like sparse decomposition algorithms. The generator creates
+multiscale Gabor dictionaries with logarithmically distributed window
+lengths,automatically selecting window shifts and FFT sizes for each atom
+scale.
+
+The generated dictionaries support multiresolution signal analysis by
+combining short atoms for transient components and long atoms for slowly
+varying structures. Long atoms are allowed through zero-padding, following
+the strategy commonly used in Matching Pursuit implementations.
+
+```{r generate_dict, include = TRUE, echo = TRUE, warning = FALSE}
+# Generate a dictionary for a 4096-sample signal
+dict <- generate_xml_dict (
+   N = 4096,
+   file = tempfile(fileext = ".xml")
+)
+
+dict
+```
+
+[Back to menu](#top)
+
+## Bibliography

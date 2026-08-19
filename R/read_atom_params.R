@@ -1,6 +1,6 @@
 #' Read atom parameters from a SQLite database
 #'
-#' Reads atom parameters stored in a SQLite database created by \code{empi_execute()} function.
+#' Reads the atom parameters from a SQLite database produced by \code{empi_execute()}.
 #'
 #' @param db_file A character string giving the path to a SQLite database file.
 #'
@@ -18,19 +18,23 @@
 #'
 #' @examples
 #' # Example database containing data from 18 channels
-#' file <- system.file("extdata", "EEG_bipolar_filtered.db", package = "MatchingPursuit")
-#' out <- atom_params(file)
+#' file <- system.file("extdata", "EEG_filter_resample_montage.db", package = "MatchingPursuit")
+#' out <- read_atom_params(file)
 #' out[which(out$channel_id == 1), ]
 #' out[which(out$channel_id == 18), ]
 #'
 #' # Example database containing data from a single channel
 #' file <- system.file("extdata", "sample1.db", package = "MatchingPursuit")
-#' out <- atom_params(file)
+#' out <- read_atom_params(file)
 #' out
 #'
-atom_params <- function(db_file) {
+read_atom_params <- function(db_file) {
 
-  out <- read_empi_db_file(db_file)
+  if (!file.exists(db_file)) {
+    stop("Database file does not exist: ", db_file)
+  }
+
+  out <- read_empi_db(db_file)
 
   atoms <- data.frame(
     channel_id = out$atoms$channel_id,
@@ -41,18 +45,4 @@ atom_params <- function(db_file) {
     scale = out$atoms$scale,
     position = out$atoms$position
   )
-
-  atoms <- round(as.data.frame(atoms), 3)
-
-  colnames(atoms) <- c(
-    "channel_id",
-    "atom_number",
-    "energy",
-    "frequency",
-    "phase",
-    "scale",
-    "position"
-  )
-
-  return(atoms)
 }

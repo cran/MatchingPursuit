@@ -20,8 +20,11 @@ to contain column names.}
 \value{
 A list containing:
 
+\describe{
   \item{signal}{Data frame containing all signals (rows = samples, columns = channels).}
   \item{sampling_frequency}{Sampling frequency.}
+  \item{time}{Time vector corresponding to signal samples.}
+}
 }
 \description{
 Reads and validates a CSV file structure
@@ -37,7 +40,9 @@ head(out)
 
 signal <- read_csv_signals(file, col_names = "signal_1")
 head(signal$signal)
-signal$ sampling_frequency
+signal$sampling_frequency
+head(signal$time)
+tail(signal$time)
 
 file <- system.file("extdata", "sample2.csv", package = "MatchingPursuit")
 signal <- read_csv_signals(file, col_names = c("signal_1"))
@@ -48,6 +53,6 @@ signal$sampling_frequency
 file <- system.file("extdata", "sample3.csv", package = "MatchingPursuit")
 signal <- read_csv_signals(file, col_names_in_csv = TRUE)
 head(signal$signal)
-signal$ sampling_frequency
+signal$sampling_frequency
 
 }

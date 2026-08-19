@@ -22,7 +22,7 @@
 )
 }
 \arguments{
-\item{x}{An object of class \code{mp} created by \code{empi_execute()}.}
+\item{x}{An object of class \code{mp} returned by \code{empi_execute()} or \code{mp_omp_execute()}.}
 
 \item{channel}{Channel from the SQLite file to process.}
 
@@ -60,7 +60,7 @@ frequency axis. Non-negative integers such as 2, 4, 5, or 8 are typically approp
 \item{...}{Currently ignored. Required for compatibility with the generic \code{plot()}.}
 }
 \value{
-No return value, called to visualize the empi decomposition.
+No return value, called to visualize the EMPI decomposition.
 }
 \description{
 This function is a wrapper around \code{tf_map()} with \code{out_mode = "plot"}.
@@ -71,10 +71,10 @@ file <- system.file("extdata", "sample1.csv", package = "MatchingPursuit")
 signal <- read_csv_signals(file, col_names = "ch1")
 
 # Execute the MP algorithm.
-mp_class <- empi_execute(signal = signal)
+out_empi <- empi_execute(signal = signal)
 
 # Plot a time-frequency map based on MP atoms.
-plot(mp_class)
+plot(out_empi)
 }
 
 }
