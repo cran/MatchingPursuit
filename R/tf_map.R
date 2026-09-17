@@ -4,10 +4,13 @@
 #' The resulting map can be: 1) displayed on the screen, 2) saved as a \code{.png} file,
 #' or 3) saved as an \code{.RData} object.
 #'
+#' The function also computes basic reconstruction-quality measures for the
+#' selected channel, including signal energy, residual energy, and normalized
+#' reconstruction error (NRE).
+#'
 #' @importFrom graphics rasterImage par points text axis mtext layout plot.new plot.window box abline title
 #' @importFrom grDevices hcl.colors graphics.off pdf dev.off png
 #' @importFrom utils tail
-#' @importFrom DescTools DrawEllipse
 #' @importFrom imager as.cimg resize
 #'
 #' @param x An object of class \code{mp} or a path to a SQLite file created by \code{empi_execute()}.
@@ -25,7 +28,6 @@
 #' (\code{f / 2} follows the Nyquist rule). If \code{NULL}, it is determined from the atom
 #' with the highest frequency \code{fmax} according to \code{freq_divide = (f / 2) / fmax}.
 #'
-#'
 #' @param increase_factor Factor controlling the increase in the number of pixels along the
 #' frequency axis. Non-negative integers such as 2, 4, 5, or 8 are usually appropriate.
 #'
@@ -33,9 +35,9 @@
 #'
 #' @param shortening_factor_y Usually, a value of 2 provides better atom visualization.
 #'
-#' @param display_crosses Whether small crosses should be displayed at the centres of atoms.
-#'
-#' @param display_atom_numbers Whether atom numbers should be displayed in the centres of atoms.
+#' @param atom_centers \code{"crosses"}, \code{"numbers"}, or \code{NULL}. Determines
+#' how the centres of atoms (represented as so-called blobs) are marked on the T-F map
+#' (with small crosses, atom numbers, or no markers).
 #'
 #' @param display_grid Whether grid lines should be drawn.
 #'
@@ -86,6 +88,11 @@
 #'     \item{gabor_functions}{All Gabor functions.}
 #'     \item{reconstruction}{Reconstructed signal.}
 #'     \item{signal}{ Original signal.}
+#'     \item{signal_energy}{Energy of the original signal for the selected channel.}
+#'     \item{reconstruction_energy}{Energy of the reconstructed signal for the selected channel.}
+#'     \item{residual_energy}{Energy of the reconstruction residual.}
+#'     \item{explained_energy}{Proportion of the original signal energy explained by the reconstruction,
+#'     \code{1 - sum((signal - reconstruction)^2) / sum(signal^2)}.}
 #'     \item{sampling_frequency}{Sampling frequency.}
 #'     \item{grid_size_t}{Grid size along the time axis.}
 #'     \item{grid_size_f}{Grid size along the frequency axis.}
@@ -100,45 +107,49 @@
 #' @export
 #'
 #' @examples
-#' file <- system.file("extdata", "sample1.db", package = "MatchingPursuit")
-#' empi_class <- read_empi_db(file)
+#' if (interactive()) {
+#' file <- system.file("extdata", "sample1.csv", package = "MatchingPursuit")
+#' signal <- read_csv_signals(file)
+#'
+#' sample1_empi_out <- empi_execute (
+#'   signal = signal,
+#'   empi_options = "-o local --gabor -i 25",
+#' )
 #'
 #' # 'freq_divide' is set arbitrarily
 #' out <- tf_map(
-#'   x = empi_class,
+#'   x = sample1_empi_out,
 #'   channel = 1,
 #'   mode = "sqrt",
 #'   freq_divide = 4,
 #'   increase_factor= 4,
-#'   display_crosses = TRUE,
-#'   display_atom_numbers = FALSE,
+#'   atom_centers = "crosses",
 #'   out_mode = "plot",
 #' )
 #'
 #' # 'freq_divide' is determined based on the atom with the highest frequency
 #' out <- tf_map(
-#'   x = empi_class,
+#'   x = sample1_empi_out,
 #'   channel = 1,
 #'   mode = "sqrt",
 #'   increase_factor= 4,
-#'   display_crosses = TRUE,
-#'   display_atom_numbers = FALSE,
+#'   atom_centers = "numbers",
 #'   out_mode = "plot",
 #' )
+#' }
 #'
 tf_map <- function(
     x = NULL,
     channel,
     mode = "sqrt",
     freq_divide = NULL,
-    increase_factor = 1,
+    increase_factor = 4,
     shortening_factor_x = 2,
     shortening_factor_y = 2,
-    display_crosses = TRUE,
-    display_atom_numbers = FALSE,
+    atom_centers = "crosses",
     display_grid = FALSE,
     color = "white",
-    palette = 'my custom palette',
+    palette = "my custom palette",
     reverse_palette = TRUE,
     out_mode = "plot",
     path = NULL,
@@ -147,7 +158,7 @@ tf_map <- function(
     draw_ellipses = FALSE,
     plot_signals = TRUE,
     write_atoms = FALSE,
-    verbose = TRUE) {
+    verbose = FALSE) {
 
   # Store
   old_par <- par("mfrow", "pty", "mai", "mgp", "las", "xaxs", "yaxs")
@@ -283,20 +294,30 @@ tf_map <- function(
   gabors <- out$gabors[[channel]]
 
   # Signal energy
-  o <- round(sum(signal^2), 2)
-  r <- round(sum(reconstruction^2), 2)
+  signal_energy <- sum(signal^2, na.rm = TRUE)
+  reconstruction_energy <- sum(reconstruction^2, na.rm = TRUE)
+
+  residual_energy <- sum((signal - reconstruction)^2, na.rm = TRUE)
+  explained_energy <- if (signal_energy > 0) {
+    1 - residual_energy / signal_energy
+  } else {
+    NA_real_
+  }
 
   if (verbose) {
     message(
-      "Channel number: ", channel, "\n",
-      "Total channels: ", total_channels, "\n",
-      "Number of atoms: ", length(rows), "\n",
-      "Sampling frequency: ", sampling_frequency, " Hz", "\n",
-      "Epoch size (in points): ", epochSize, "\n",
-      "Signal length (in seconds): ", s, "\n",
-      "\nEnergy of the original signal:      ",o, "\n",
-      "Energy of the reconstructed signal: ",r, "\n",
-      "reconstruction / original %:        ", round(r / o * 100, digits = 2), "\n")
+      "Channel number:             ", channel, "\n",
+      "Total channels:             ", total_channels, "\n",
+      "Number of atoms:            ", length(rows), "\n",
+      "Sampling frequency:         ", sampling_frequency, " Hz\n",
+      "Epoch size (in points):     ", epochSize, "\n",
+      "Signal length (in seconds): ", s, "\n\n",
+
+      "Signal energy:              ", round(signal_energy, 2), "\n",
+      "Reconstruction energy:      ", round(reconstruction_energy, 2), "\n",
+      "Residual energy:            ", round(residual_energy, 2), "\n",
+      "Explained_energy:           ", round(100 * explained_energy, 2),"%"
+    )
   }
 
   if(write_atoms) {
@@ -348,22 +369,33 @@ tf_map <- function(
   for (n in 1:num_atoms) {
 
     if (draw_ellipses && out_mode == "plot") {
-      ellipse <- DrawEllipse(
-        x = position[n],
-        y = frequency[n],
-        # from Heisenberg rule: delta_t x delta_omega >= 1/2
-        radius.x = (scale[n] / 2),
-        radius.y = 1 / ((scale[n])),
-        col = "lightgray",
-        border = "black",
-        plot = TRUE,
-        nv = 100)
+      # ellipse <- DrawEllipse(
+      #   x = position[n],
+      #   y = frequency[n],
+      #   # from Heisenberg rule: delta_t x delta_omega >= 1/2
+      #   radius.x = (scale[n] / 2),
+      #   radius.y = 1 / ((scale[n])),
+      #   col = "lightgray",
+      #   border = "black",
+      #   plot = TRUE,
+      #   nv = 100)
+      #
+      # To avoid loading DescTools (I use only one function from it, DrawEllipse).
+      theta.inc <- 2 * pi / 100
+      theta <- seq(0, 2 * pi - theta.inc, by = theta.inc)
 
-      if (display_crosses) {
+      graphics::polygon(
+        x = position[n] + (scale[n] / 2) * cos(theta),
+        y = frequency[n] + (1 / scale[n]) * sin(theta),
+        col = "lightgray",
+        border = "black"
+      )
+
+      if (atom_centers == "crosses") {
         points(position[n], frequency[n] , pch = 3, col = "black", cex = 1)
       }
 
-      if(display_atom_numbers) {
+      if(atom_centers == "numbers") {
         text(position[n], frequency[n], n, col = "black", cex = 1)
       }
     }
@@ -440,7 +472,7 @@ tf_map <- function(
     mtext("Frequency [Hz]", side = 2, line = 3.5, cex = 0.8)
 
     # At the centres of the atoms, the atom numbers
-    if (display_atom_numbers) {
+    if (atom_centers == "numbers") {
       for (n in 1:num_atoms) {
         text(position[n], frequency[n], n, col = color, cex = 1)
       }
@@ -448,7 +480,7 @@ tf_map <- function(
 
     # We display small crosses in the centres of atoms
     for (n in 1:num_atoms) {
-      if (display_crosses) {
+      if (atom_centers == "crosses") {
         points(position[n], frequency[n], pch = 3, col = color, cex = 0.8)
       }
     }
@@ -463,8 +495,10 @@ tf_map <- function(
            main = "Original signal", panel.first = grid())
       abline(h = 0, col = "blue")
 
+      main_txt <- paste0("Reconstructed signal (explained energy = ", round(100 * explained_energy, 2),"%)"
+      )
       plot(x = xx, reconstruction, type = "l", xlab = "", ylab = "", xaxs = "i", las = 1, ylim = sig_range,
-           main = "Reconstructed signal", panel.first = grid())
+           main = main_txt, panel.first = grid())
       abline(h = 0, col = "blue")
     }
 
@@ -475,8 +509,8 @@ tf_map <- function(
     png(file_name, width = size[1], height = size[2], pointsize = 18)
     par(pty = "m", mai = c(0, 0, 0, 0))
     graphics::image(x = t, y = y, z = tf_map, col = col)
-    if (display_crosses) points(position, frequency, pch = 3, col = color, cex = 0.8)
-    if (display_atom_numbers) {
+    if (atom_centers == "crosses") points(position, frequency, pch = 3, col = color, cex = 0.8)
+    if (atom_centers == "numbers") {
       for (n in 1:num_atoms) {
         text(position[n], frequency[n], n, col = color, cex = 0.8)
       }
@@ -531,6 +565,10 @@ tf_map <- function(
     reconstruction = reconstruction,
     signal = signal,
     sampling_frequency = sampling_frequency,
+    signal_energy = signal_energy,
+    reconstruction_energy = reconstruction_energy,
+    residual_energy = residual_energy,
+    explained_energy  = explained_energy,
     grid_size_t = t,
     grid_size_f = y,
     epochSize = epochSize,

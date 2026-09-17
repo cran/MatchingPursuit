@@ -25,7 +25,8 @@ options. See the \code{README.md} file after downloading the EMPI program using 
 
 \item{write_to_file}{If \code{TRUE}, a SQLite database file will be created
 and saved in the \code{path} directory or, if \code{path = NULL}, in the
-cache directory. This file stores the results of signal decomposition using the MP algorithm}
+cache directory. This file stores the results of signal decomposition using the
+EMPI program.}
 
 \item{path}{Directory in which the SQLite database file will be saved.
 If \code{NULL}, the file will be saved in the cache directory.}
@@ -58,25 +59,31 @@ Continuous Dictionaries}. ACM Transactions on Mathematical Software, Volume 50, 
 Article No. 17, pp. 1-17, \doi{10.1145/3674832}.
 }
 \examples{
-\dontrun{
+if (interactive()) {
 file <- system.file("extdata", "sample1.csv", package = "MatchingPursuit")
-out <- read_csv_signals(file)
+signal <- read_csv_signals(file)
 
 out_empi <- empi_execute(
-  signal = out,
-  empi_options = NULL,
-  write_to_file = FALSE,
-  path = NULL,
-  file_name = NULL
+  signal = signal
 )
 
-# Default EMPI options have been changed. For details, see the EMPI README.md file.
+# Suppress standard output and standard error
 out_empi <- empi_execute(
-  signal = out,
-  empi_options = "-o none --full-atoms-in-signal -i 50 --gabor",
-  write_to_file = FALSE,
+  signal = signal,
+  ignore.stdout = TRUE,
+  ignore.stderr = TRUE
+)
+
+# The default EMPI options have been modified; see the EMPI README.md for details.
+# The '--full-atoms-in-signal' option restricts the decomposition to atoms
+# fully contained within the analyzed signal.
+# The decomposition results are saved to a SQLite database file.
+out_empi <- empi_execute(
+  signal = signal,
+  empi_options = "-o local --full-atoms-in-signal -i 50 --gabor",
+  write_to_file = TRUE,
   path = NULL,
-  file_name = NULL
+  file_name = "my_decomposition.db"
 )
 
 plot(out_empi, freq_divide = 4)

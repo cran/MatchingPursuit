@@ -1,11 +1,47 @@
+# MatchingPursuit 1.3.0
+
+* Simplified the native MP/OMP core interfaces. `mp_core()` and `omp_core()`
+  now accept numeric vector, matrix, or data frame dictionaries directly and 
+  no longer accept `topk` objects. Dictionary atoms are internally normalized 
+  to unit L2 norm before decomposition, making atom selection invariant to
+  non-zero scaling of dictionary columns.
+  
+* Updated the high-level Gabor-based MP/OMP workflow in `mp_omp_execute()`,
+  which now internally calls `read_gabor_dict()` and `topk_gabor_atoms()`.
+  The `dictionary` argument has changed: it now accepts either `NULL` or a path
+  to an XML dictionary file, instead of a precomputed `topk` object. When
+  `dictionary = NULL`, the XML dictionary is generated internally.
+  
+* Added the `full_atoms_in_signal` parameter to `mp_omp_execute()`, which
+  controls whether Gabor atoms must be fully contained within the signal
+  boundaries. When set to `FALSE`, additional boundary-crossing atoms are
+  included in the candidate dictionary, which can substantially improve
+  decomposition quality near the beginning and end of the signal.
+
+* Renamed `topk_atoms()` function to `topk_gabor_atoms()`.
+
+* Removed the `mp_omp_pipeline()` function because its functionality is now
+  provided by `mp_omp_execute()`.
+  
+* Added `omp_reference()`, a simple educational and reference implementation
+  of Orthogonal Matching Pursuit.
+
+* Added and improved S3 methods for package objects, including methods for 
+  printing, summarizing, and plotting.
+
+* Updated package documentation, examples, README, and vignette to reflect
+  the current MP-R, OMP-R, and EMPI workflows.
+
+* Improved input validation, error handling, and overall code consistency.
+
 # MatchingPursuit 1.2.0
 
-* Added a pure R implementation of the Matching Pursuit algorithm (`mp_core()`),
+* Added a native R implementation of the Matching Pursuit algorithm (`mp_core()`),
   intended primarily for educational, methodological, and experimental use. It
   complements the optimized external EMPI backend and allows the algorithm to be
   inspected and modified directly in R.
 
-* Expanded the package vignette with examples of the pure R Matching Pursuit
+* Expanded the package vignette with examples of the native R Matching Pursuit
   implementation. The available decomposition backends are now more clearly
   distinguished, with the terms MP-R, OMP-R, and EMPI used consistently
   throughout.
@@ -13,8 +49,7 @@
 * Significantly expanded `README.md` to provide a more comprehensive overview
   of the package, its functionality, and typical workflows.
 
-* Renamed `plot.ecg()` and `read_ecg_signals()` to `plot.wfdb()` and
-  `read_wfdb_signals()`, respectively.
+* Renamed `plot.ecg()` and `read_ecg_signals() `to `plot.wfdb()` and `read_wfdb_signals()`, respectively.
 
 * Updated `read_csv_signals()`, `read_edf_signals()`, and `read_wfdb_signals()`
   to return objects of classes `sig`, `edf`, and `wfdb`, respectively.
@@ -36,7 +71,7 @@
   - `sig_to_bin()` was renamed to `signal_to_bin()`.
   - `gabor_proj_fft()` was renamed to `gabor_projection_fft()`.
 
-* Simplified mp_omp_pipeline() to provide a higher-level MP/OMP decomposition 
+* Simplified `mp_omp_pipeline()` to provide a higher-level MP/OMP decomposition 
   workflow for signals stored in CSV format; signal-specific preprocessing is 
   expected to be performed separately.
   
