@@ -1,3 +1,42 @@
+# MatchingPursuit 1.4.0
+
+* Added `mp_core_gabor()` and `omp_core_gabor()` for direct MP and OMP
+  decomposition using parameterized Gabor dictionaries. Candidate atoms are
+  evaluated against the current residual using FFT-based projections and
+  analytical phase optimization, without materializing the full time-domain
+  dictionary.
+
+* Added `gabor_core_to_mp()` to convert single-channel results from
+  `mp_core_gabor()` and `omp_core_gabor()` into standardized `mp` objects,
+  enabling their use with time-frequency visualization functions.
+
+* Updated `mp_omp_execute()` to use `mp_core_gabor()` and `omp_core_gabor()`
+  for multi-channel decomposition instead of the previous top-k preselection
+  and matrix-based workflow. The `tol` argument is passed directly to the
+  selected algorithm and, when specified, overrides `n_nonzero_coefs`.
+
+* Removed `topk_gabor_atoms()`, `gabor_atoms_matrix()`, and the `topk` class.
+  The obsolete `topk` and `sparse` arguments are no longer part of the
+  `mp_omp_execute()` interface.
+  
+* Extended `tf_map()` with separate controls for Gaussian blob amplitude
+  scaling (`mode = "sqrt"`, `"linear"`, or `"energy"`) and map display
+  (`display_scale = "linear"` or `"db"`). The new `db_range` argument controls
+  the displayed dynamic range in decibels. Energy-normalized blobs integrate
+  to the assigned atom energy over the full time-frequency plane.
+
+* Improved time-frequency map visualization with a smoothly interpolated
+  custom color palette, configurable palettes and blob widths, and updated
+  examples illustrating the available display modes. The returned `tf_map`
+  retains its original values before display-scale transformation.  
+
+* Added shared internal helpers for Gabor dictionary preparation, iterative
+  atom search, and reconstruction of selected atoms. Updated documentation
+  and examples to reflect the new Gabor decomposition workflow.
+
+* Retained `mp_core()` and `omp_core()` as general-purpose, matrix-based
+  implementations independent of the Gabor-specific workflow.
+ 
 # MatchingPursuit 1.3.0
 
 * Simplified the native MP/OMP core interfaces. `mp_core()` and `omp_core()`

@@ -1,3 +1,19 @@
+<style>
+body {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 30px;
+  padding-right: 30px;
+  box-sizing: border-box;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+</style>
+
 # MatchingPursuit: An R Framework for Sparse Time-Series Decomposition Using Matching Pursuit and Orthogonal Matching Pursuit
 
 <!-- badges: start -->
@@ -14,8 +30,9 @@ general time-series data using the **Matching Pursuit** and **Orthogonal Matchin
 algorithms. For multi-channel signals, each channel is decomposed independently; 
 atoms are not selected jointly across channels.
 
-The package provides two native R decomposition implementations, **MP-R** and **OMP-R**, 
-together with the optional external **EMPI** backend for high-performance MP decomposition.
+The package provides native R implementations of **MP-R** and **OMP-R** for both
+general matrix-based dictionaries and parameterized Gabor dictionaries, together
+with the optional external **EMPI** backend for high-performance MP decomposition.
 
 Supported features:
 
@@ -24,7 +41,8 @@ Supported features:
     - Matching Pursuit (**MP-R**)
     - Orthogonal Matching Pursuit (**OMP-R**)
 - An educational and reference implementation of OMP through `omp_reference()`
-- Specialized Gabor dictionary support for time-frequency decomposition
+- Direct, iterative Gabor-based MP/OMP decomposition using FFT-based projections
+  and analytical phase optimization, without materializing the full dictionary
 - Optional high-performance Gabor-based Matching Pursuit using the external
   **Enhanced Matching Pursuit Implementation (EMPI)** backend
 - Support for biomedical signal formats:
@@ -55,9 +73,10 @@ install.packages("MatchingPursuit")
 ### MP-R and OMP-R: Gabor-based decomposition
 
 For Gabor-based decomposition, `mp_omp_execute()` provides the high-level interface. 
-It prepares the Gabor dictionary, selects candidate atoms, performs MP or OMP 
-decomposition, combines the numerical results with Gabor metadata, and returns an 
-object of class `"mp"`.
+It generates or reads the parameterized Gabor dictionary and calls
+`mp_core_gabor()` or `omp_core_gabor()` for iterative selection based on the
+current residual. It combines decomposition results across channels and returns
+an object of class `"mp"` without materializing the complete dictionary.
 
 ```r
 sig_file <- system.file("extdata", "sample1.csv", package = "MatchingPursuit")
@@ -79,7 +98,7 @@ The time–frequency map below shows the energy distribution of the selected ato
 White crosses indicate the centers of individual time–frequency blobs, i.e. 
 the atoms' central time and central frequency coordinates. The panels below 
 show the original signal and its reconstruction; in this example, the reconstruction 
-explains 98.69% of the signal energy.
+explains 99.25% of the signal energy.
 
 <p align="center">
   <img src="man/figures/mp.png" width="700">
@@ -102,19 +121,19 @@ dictionary <- cbind(
   cos(2 * pi * 10 * t)
 )
 
-signal <- sin(2 * pi * 5 * t) + 0.5 * cos(2 * pi * 10 * t)
+signal_custom <- sin(2 * pi * 5 * t) + 0.5 * cos(2 * pi * 10 * t)
 
 out <- omp_core(
   dictionary = dictionary,
-  signal = signal,
+  signal = signal_custom,
   n_nonzero_coefs = 2
 )
 
 out$support
-[1] 1 4
+# [1] 1 4
 
 out$relative_residual_energy
-[1] 1.000000e+00 2.012529e-01 4.867641e-32
+# [1] 1.000000e+00 2.012529e-01 6.721842e-32
 ```
 
 In the example above, OMP correctly identifies atoms 1 and 4, corresponding to 
@@ -160,25 +179,25 @@ and residual orthogonality checks.
 ```r
 ref <- omp_reference(
   dictionary = dictionary,
-  signal = signal,
+  signal = signal_custom,
   n_nonzero_coefs = 2
 )
 
 ref$selected_atoms
-[1] 1 4
+# [1] 1 4
 
 ref$coefficients_original_dict
-[1] 1.0 0.0 0.0 0.5
+# [1] 1.0 0.0 0.0 0.5
 
 ref$normalized_reconstruction_error_original_dict
-[1] 6.95e-16
+# [1] 6.951762e-16
 
 ref$orthogonality
-[[1]]
--5.03e-15
+# [[1]]
+# [1] -5.031148e-15
 
-[[2]]
--5.30e-15  7.07e-15
+# [[2]]
+# [1] -5.297255e-15  7.072036e-15
 ```
 
 The reference implementation recovers the exact coefficients of the original 
@@ -193,20 +212,22 @@ The package provides three main decomposition routes.
 | Route | Main functions | Purpose | Recommended use |
 |:--|:--|:--|:--|
 | **General matrix-based MP/OMP** | `mp_core()`, `omp_core()` | Sparse decomposition with arbitrary matrix dictionaries | General sparse decomposition and experimentation |
-| **Native R Gabor-based MP/OMP** | `mp_omp_execute()` | High-level Gabor-based MP or OMP decomposition | Time-frequency decomposition in R |
+| **Native R Gabor-based MP/OMP** | `mp_core_gabor()`, `omp_core_gabor()`, `mp_omp_execute()` | Iterative decomposition directly on a parameterized Gabor dictionary | Time-frequency decomposition in R |
 | **External EMPI-based MP** | `empi_execute()` | Optimized Gabor-based Matching Pursuit | High-performance time-frequency decomposition |
 
 ## Typical workflows
 
-The diagram below summarizes the **three available decomposition workflows** and
-their relationship within the package. Blue boxes denote R functions, whereas 
-peach boxes represent workflow components, inputs, or returned objects. 
-The dashed red line connects `mp_omp_execute()` in panel (a) with its internal 
-workflow shown in panel (b).
+The diagram below illustrates the main workflows supported by MatchingPursuit. The 
+package provides native R implementations of MP and OMP for both user-defined matrix 
+dictionaries and parameterized Gabor dictionaries, as well as optional integration with 
+the external EMPI backend. Gabor-based MP and OMP can be performed without materializing 
+the full dictionary.
 
 <p align="center">
   <img src="man/figures/main_workflows.png" width="800">
 </p>
+**Figure legend:** Blue boxes represent R functions, while light orange boxes represent 
+workflow steps, inputs, or output objects.
 
 The **general matrix-based MP/OMP workflow** operates directly on a user-defined numeric
 dictionary and input signal through `mp_core()` or `omp_core()`. It is independent
@@ -215,15 +236,17 @@ with arbitrary matrix dictionaries. These functions return low-level decompositi
 results, giving the user direct control over the dictionary and the decomposition
 procedure.
 
-The **native R Gabor-based MP/OMP workflow**, implemented by `mp_omp_execute()`,
-provides a higher-level interface for Gabor-based MP and OMP decomposition. It
-integrates dictionary specification or generation, dictionary reading,
-channel-specific atom preselection, decomposition with `mp_core()` or `omp_core()`,
-and aggregation of the results into an object of class `"mp"`. If no XML dictionary
-specification is supplied, `generate_xml_dict()` creates one internally; otherwise,
-the user-provided XML file is used. The specification is processed by
-`read_gabor_dict()`, after which `topk_gabor_atoms()` selects candidate Gabor atoms
-for each signal channel.
+The **native R Gabor-based MP/OMP workflow** uses `mp_core_gabor()` and
+`omp_core_gabor()` for direct decomposition with a parameterized Gabor dictionary.
+The high-level `mp_omp_execute()` interface handles XML dictionary generation or
+selection, calls `read_gabor_dict()`, and processes each signal channel
+independently. At each iteration, the selected algorithm searches for the Gabor
+atom best matching the current residual. Candidate projections are evaluated
+using FFT-based computations, and atom phase is optimized analytically. Only
+selected atoms are constructed in the time domain; no top-k preselection or
+complete matrix dictionary is required. MP updates the residual after each
+selection, while OMP additionally recomputes all active coefficients by least
+squares. The channel results are combined into an object of class `"mp"`.
 
 The **external EMPI-based MP workflow** provides an alternative MP implementation
 through `empi_execute()`. In this case, decomposition is performed by the external
@@ -238,16 +261,6 @@ MP/OMP for arbitrary user-defined dictionaries, the integrated native Gabor MP/O
 workflow, and the external EMPI-based Gabor MP workflow. The latter two return a
 common `"mp"` object, facilitating consistent visualization and interpretation
 within the package.
-
-## Reproducing the SoftwareX examples
-
-The complete code used to reproduce the analyses and results presented in the
-SoftwareX article is provided in:
-
-[`replication_script.R`](https://github.com/artur-gramacki/MatchingPursuit/releases/download/1.3.0/replication_script.R)
-
-The script includes signal generation, decomposition settings, reconstruction
-accuracy evaluation, runtime measurements, and the EEG example.
 
 ## Documentation
 

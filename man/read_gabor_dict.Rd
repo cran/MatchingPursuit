@@ -21,11 +21,11 @@ read_gabor_dict(
 of valid time positions.}
 
 \item{verbose}{Logical; if \code{TRUE}, prints progress information about parsed blocks
-and generated atoms.}
+and candidate atoms.}
 
-\item{full_atoms_in_signal}{Logical. If \code{TRUE}, only atoms whose complete support lies within
-the signal are generated. If \code{FALSE}, atom support may extend beyond
-the signal boundaries.}
+\item{full_atoms_in_signal}{Logical. If \code{TRUE}, only candidate atoms whose complete support lies
+within the signal are included in the dictionary. If \code{FALSE}, candidate
+atom supports may extend beyond the signal boundaries.}
 }
 \value{
 A matrix where each row describes a Gabor atom with the following columns:
@@ -84,21 +84,18 @@ signal, and the support of an atom may extend beyond the signal boundaries.
 }
 \section{Usage in sparse decomposition workflow}{
 
-The output of \code{read_gabor_dict()} is a low-level description of the
-Gabor time-frequency grid. It serves as input to \code{topk_gabor_atoms()},
-which:
-\itemize{
-  \item evaluates complex Gabor atoms,
-  \item computes phase-invariant projections onto the signal,
-  \item selects the best \code{topk} atoms for each channel,
-  \item constructs real-valued atom representations using optimal phases.
-}
+The output of \code{read_gabor_dict()} is a parameterized description
+of the Gabor time-frequency grid. It serves as input to
+\code{mp_core_gabor()} and \code{omp_core_gabor()}, which perform
+iterative signal decomposition directly on the parameterized dictionary.
 
-The resulting \code{"topk"} object contains channel-specific atom matrices
-and associated metadata. Individual atom matrices can subsequently be passed
-to \code{mp_core()} or \code{omp_core()} for sparse decomposition.
-The higher-level \code{mp_omp_execute()} function performs these preparation
-steps internally.
+At each iteration, candidate Gabor atoms are evaluated against the
+current residual using FFT-based projections and analytical phase
+optimization. Only the selected atoms are reconstructed in the
+time domain, avoiding materialization of the complete dictionary.
+
+The higher-level \code{mp_omp_execute()} function handles dictionary
+preparation and multi-channel decomposition internally.
 }
 
 \section{EMPI compatibility}{
@@ -176,9 +173,8 @@ range(atoms_overstep[, "time_sample"])
 
 }
 \seealso{
-\code{\link{topk_gabor_atoms}},
-\code{\link{mp_omp_execute}},
-\code{\link{omp_core}},
-\code{\link{mp_core}},
-\code{\link{generate_xml_dict}}
+\code{\link{generate_xml_dict}},
+\code{\link{mp_core_gabor}},
+\code{\link{omp_core_gabor}},
+\code{\link{mp_omp_execute}}
 }

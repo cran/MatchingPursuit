@@ -91,11 +91,15 @@ The functionality of the package includes:
 7. Signal pre-processing using notch, low-pass, high-pass, band-pass, and band-stop filters  
 8. Sparse decomposition using arbitrary user-defined dictionaries represented
    as numeric matrices  
+   
 ## Naming convention
+
 In this vignette, we use the following naming convention:
 
-- The terms **MP-R** and **OMP-R** with a suffix **R** refer to the corresponding backends rather than to algorithms. The terms **MP** and **OMP** without a suffix **R** refer to the corresponding algorithms rather than to a specific implementation.
+- The terms **MP-*R** and **OMP-R** (with a suffix **R**) refer to the native R implementations of **MP** and **OMP** (without a suffix **R**), respectively, including their matrix-based and parameterized Gabor variants. The terms MP and OMP refer to the algorithms independently of any particular implementation.
 - **EMPI** refers to the external backend implementing the Matching Pursuit algorithm, developed by Piotr T. Różański and available on [GitHub](https://github.com/develancer/empi).
+
+
 
 ## Installing the optional EMPI backend
 
@@ -103,7 +107,7 @@ The below `empi_install()` function downloads **Enhanced Matching
 Pursuit Implementation** external program (or **EMPI** for short), see
 @Rozanski-2024, and stores it in the cache directory. The function
 downloads the EMPI program in a version compatible with the operating
-system used (Windows, Linux, MacOS-arm64).
+system used (Windows, Linux, MacOS ARM64).
 
 First, the user can check where EMPI will be downloaded from.
 
@@ -119,11 +123,14 @@ function cannot be executed while generating this vignette.
 # empi_install()
 ```
 
-User can check whether the EMPI program is installed; if not, an error
+The user can check whether the EMPI program is installed; if not, an error
 message is displayed indicating that installation is required.
 
 ```{r empi_check, include = TRUE, echo = TRUE}
-empi_check()
+tryCatch(
+  empi_check(),
+  error = function(e) message(conditionMessage(e))
+)
 ```
 
 [Back to menu](#top)
@@ -201,9 +208,10 @@ The input data (`signal`) is passed as an argument to the
 containing all atom parameters.
 
 For Gabor-based decomposition, `mp_omp_execute()` provides the high-level
-native R interface. It prepares the Gabor dictionary, selects candidate
-atoms, performs MP or OMP decomposition, and returns an object of class
-`"mp"`. In this example, classical Matching Pursuit is used; setting
+native R interface. It prepares a parameterized Gabor dictionary and performs
+iterative MP or OMP decomposition by selecting atoms against the current residual,
+without materializing the complete time-domain dictionary. It returns an object
+of class `"mp"`. In this example, classical Matching Pursuit is used; setting
 `mode = "omp"` runs Orthogonal Matching Pursuit instead.
 
 
@@ -235,26 +243,33 @@ that the original signal and the reconstructed signal differ only
 minimally. Also, basic signal parameters are displayed, along with
 information about the number of atoms into which the input signal was
 decomposed. Additionally, the energy of the input signal and the reconstructed
-signal (from the atoms) is calculated. The results show that 91.58% of
-the original signal's energy is "explained" by the generated atoms.
+signal (from the atoms) is calculated. The decomposition reduces the residual 
+energy by 92.45% relative to the original signal energy.
 Naturally, increasing the number of generated atoms will likely bring
 the energy of the reconstructed signal closer to 100%.
-
 
 Alternatively, you can use the `tf_map()` function to display a time-frequency map. 
 The function provides greater control over the visualization process and offers 
 additional functionality, such as saving time-frequency maps to a file. See the 
 function documentation for details.
 
-In the below plot, the centers of the atoms (in terms of time and
-frequency coordinates) are marked with the numbers of successive atoms,
-sorted from highest to lowest energy.
+In the plot below, the centers of the atoms are marked with numbers indicating
+the order in which they were selected during decomposition. The color palette
+and the `mode`, `display_scale`, `db_range`, `shortening_factor_x`, and
+`shortening_factor_y` parameters have also been modified.
 
 ```{r sample1_plot_2, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
 out <- tf_map(
   x = fit_mp,
   channel = 1,
   freq_divide = 4,
+  mode = "energy",
+  display_scale = "db",
+  db_range = 40,
+  shortening_factor_x = 4,
+  shortening_factor_y = 4,  
+  palette = "Inferno",
+  reverse_palette = FALSE,
   atom_centers = "numbers"
 )
 ```
@@ -304,8 +319,8 @@ sample1_empi_out <- readRDS(file = file)
 plot(sample1_empi_out)
 ```
 The T-F map is similar to the previous one, although some differences in
-atom selection can be observed. The reconstructed signal explains a slightly
-larger proportion of the original signal energy, reaching 92.69%.
+atom selection can be observed. The decomposition reduces the residual 
+energy by 92.69% relative to the original signal energy.
 
 [Back to menu](#top)
 
@@ -457,22 +472,16 @@ signal_eeg_f_r_m[1:6, 1:6]
 
 ### Step 5 - MP decomposition {.unnumbered}
 
-**Important note:** The code below has been commented out. See the
-explanation given [here](#important_note).
+```{r eeg_mp_omp_execute, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
 
-```{r eeg_empi_execute, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-# The empi_options parameter is NULL, so the EMPI program is 
-# run with the parameters "-o local --gabor -i 50"
+# For example decomposition, get only one channel.
+sig <- as_sig(signal_eeg_f_r_m[, 2], sampling_frequency_r)
 
-# # To make the RDS file smaller (CRAN requirement), we select only one channel.
-# sig <- as_sig(signal_eeg_f_r_m[, 2], sampling_frequency_r)
-
-# eeg_empi_out <- empi_execute (
-#   signal = sig,
-#   empi_options = NULL
-# )
-# 
-# saveRDS(eeg_empi_out, file = "eeg_empi_out.rds")
+eeg_mp_out <- mp_omp_execute(
+  mode = "mp",
+  signal = sig,
+  n_nonzero_coefs = 50
+)
 ```
 
 ### Step 6 - Time-frequency map {.unnumbered}
@@ -491,14 +500,12 @@ decomposed.
 
 Additionally, the energy of the input signal and the reconstructed
 signal (from the generated atoms) is calculated. The results show that
-nearly all of the energy of the original signal (96.18%) is “explained”
+nearly all of the energy of the original signal (95.98%) is "explained"
 by the generated atoms.
 
 ```{r eeg_tf_map, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-file <- system.file("extdata", "eeg_empi_out.rds", package = "MatchingPursuit")
-eeg_empi_out <- readRDS(file = file)
-
-plot(eeg_empi_out)
+plot(eeg_mp_out)
+summary(eeg_mp_out)
 ```
 
 ### Step 7 - Displaying EEG signals using `plot()` (optional) {.unnumbered}
@@ -591,18 +598,22 @@ out_ecg$record_name
 ### Step 2 - MP decomposition {.unnumbered}
 
 The input data (`signal`) is passed as an argument to the
-`empi_execute()` function, which generates the object of class `mp` 
+`mp_omp_execute()` function, which generates the object of class `mp` 
 containing all atom parameters.
 
-**Important note:** The code below has been commented out. See the
-explanation given [here](#important_note).
+```{r ecg_mp_omp_execute, include = TRUE, echo = TRUE, warning = FALSE}
+# For example decomposition, get only one channel.
 
-```{r ecg_empi_execute, include = TRUE, echo = TRUE, warning = FALSE}
-# ecg_empi_out <- empi_execute(
-#   signal = out_ecg
-# )
-# 
-# saveRDS(ecg_empi_out, file = "00001_lr.rds")
+out_ecg_1_channel <- out_ecg
+out_ecg_1_channel$signal <- as.matrix(out_ecg$signal[, 1])
+out_ecg_1_channel$lead_names <-  "I"
+
+ecg_mp_out <- mp_omp_execute(
+  mode = "mp",
+  signal = out_ecg_1_channel
+)
+
+summary(ecg_mp_out)
 ```
 
 ### Step 3 - Time-frequency map {.unnumbered}
@@ -611,13 +622,9 @@ It is now time to generate the final time-frequency (T-F) map for the
 selected channel.
 
 ```{r 00001_lr, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 7}
-# Read the previously generated decomposition result.
-file <- system.file("extdata", "00001_lr.rds", package = "MatchingPursuit")
-ecg_empi_out <- readRDS(file = file)
-
 # Create time-frequency map based on atoms.
 out <- tf_map(
-  x = ecg_empi_out,
+  x = ecg_mp_out,
   channel = 1,
   verbose = TRUE
 )
@@ -660,10 +667,10 @@ f <- 128
 t1 = n / f
 t <- seq(from = 0, to = n - 1, by = 1) / f
 
-g1 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 1, frequency = 50, normalization = F)
-g2 <- gabor_atom(n, f, mean = 8, phase = 0, sigma = 1.5, frequency = 25, normalization = F)
-g3 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 2, frequency = 30, normalization = F)
-g4 <- gabor_atom(n, f, mean = 7, phase = 0, sigma = 0.5, frequency = 15, normalization = F)
+g1 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 1, frequency = 50, normalization = FALSE)
+g2 <- gabor_atom(n, f, mean = 8, phase = 0, sigma = 1.5, frequency = 25, normalization = FALSE)
+g3 <- gabor_atom(n, f, mean = 2, phase = 0, sigma = 2, frequency = 30, normalization = FALSE)
+g4 <- gabor_atom(n, f, mean = 7, phase = 0, sigma = 0.5, frequency = 15, normalization = FALSE)
 imp <- rep(0, n)
 imp[n / 2] <- 4
 sine <- 0.2 * sin(2 * pi * 3 * t)
@@ -697,28 +704,24 @@ representation of a signal with smoothly varying frequency. This
 limitation (and, in some respects, a drawback) of the Matching Pursuit algorithm
 should be taken into account.
 
-**Important note:** The code below has been commented out. See the
-explanation given [here](#important_note).
-
 ```{r chirp_plot_tf_1, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 6}
-# sig_file <- system.file("extdata", "sample2.csv", package = "MatchingPursuit")
-# signal <- read_csv_signals(sig_file, col_names_in_csv = FALSE)
+sig_file <- system.file("extdata", "sample2.csv", package = "MatchingPursuit")
+signal <- read_csv_signals(sig_file, col_names_in_csv = FALSE)
 
-# sample2_empi_out <- empi_execute (
-#   signal = signal
-# )
-
-# saveRDS(sample2_empi_out, file = "sample2.rds")
+sample2_mp_omp_out <- mp_omp_execute (
+  mode = "omp",
+  signal = signal
+)
 ```
 
 ```{r chirp_plot_tf_2, include = TRUE, echo = TRUE, warning = FALSE, fig.width = 7, fig.height = 6}
-file <- system.file("extdata", "sample2.rds", package = "MatchingPursuit")
-sample2_empi_out <- readRDS(file = file)
-
 out <- tf_map(
-  x = sample2_empi_out,
+  x = sample2_mp_omp_out,
   channel = 1,
-  freq_divide = 1
+  freq_divide = 1,
+  mode = "energy",
+  display_scale = "db",
+  db_range = 12
 )
 
 ```
@@ -729,7 +732,7 @@ out <- tf_map(
 
 The Matching Pursuit algorithm is well-known and described in the
 literature. Its purpose is to approximate the analyzed signal using
-so-called atoms. (the text below is adapted from @Kunik-2025).
+so-called atoms (the text below is adapted from @Kunik-2025).
 
 Given a discrete signal $f \in \mathbb{R}^n$, and a possibly overcomplete
 dictionary $D =\{g_{\gamma}\}_{\gamma \in \Gamma}$ of
@@ -779,7 +782,7 @@ is modulated by a Gaussian envelope (in red).
 ```{r gabor_atom, include = TRUE, echo = FALSE, fig.width = 7, fig.height = 5, fig.align = 'center'}
 N <- 512
 fs <- 256
-# normalization = T --> signal's norm = 1
+# normalization = TRUE --> signal's norm = 1
 
 par(mfrow = c(2,2), pty = "m", mai = c(0.4, 0.4, 0.3, 0.2))
 
@@ -911,7 +914,7 @@ par(old_par)
 ## The Orthogonal Matching Pursuit algorithm in a nutshell
 
 The package also provides an implementation of the Orthogonal Matching
-Pursuit (OMP) algorithm. OMP algorithm is closely related to
+Pursuit (OMP) algorithm. The OMP algorithm is closely related to
 MP, but differs in how approximation coefficients are estimated.
 
 In the classical MP algorithm, after an atom has been selected, only
@@ -975,14 +978,14 @@ R^{n+1} = f - D_n \mathbf{a}^{(n)}. \tag{15}
 $$
 
 Because the residual is orthogonal to the span of the selected atoms,
-its correlation with every selected atom is zero. Consequently, a
+its correlation with every selected atom is zero (in exact arithmetic). Consequently, a
 previously selected atom cannot be selected again.
 
 ## Comparison of MP and OMP
 
 Both MP and OMP use a greedy correlation-based strategy to select atoms from a dictionary. The main difference between the two algorithms lies in the way the coefficients associated with the selected atoms are estimated and the residual is updated. In MP, only the coefficient of the newly selected atom is estimated at each iteration, whereas OMP jointly re-estimates the coefficients of all atoms selected so far. 
 
-The main advantage of OMP is that, after solving the least-squares problem, the residual is orthogonal to the subspace spanned by all selected atoms. Consequently, the coefficients of previously selected atoms can be re-estimated when new atoms are added. In contrast, MP does not revisit previously estimated coefficients, which makes it computationally simpler but may result in a less accurate approximation for a given number of selected atoms.
+The main advantage of OMP is that, after solving the least-squares problem, the residual is orthogonal to the subspace spanned by all selected atoms. Consequently, the coefficients of previously selected atoms can be re-estimated when new atoms are added. In contrast, MP does not revisit previously estimated coefficients, which makes it computationally simpler.OMP often achieves a lower reconstruction error than MP for a given number of selected atoms, although this is not guaranteed for every signal and dictionary.
 
 The choice between MP and OMP therefore represents a trade-off between computational efficiency and approximation accuracy. MP may be preferable when computational simplicity and speed are important, whereas OMP generally provides a more accurate reconstruction for a given number of selected atoms and may require fewer atoms to achieve a prescribed reconstruction accuracy. This improvement comes at the cost of higher computational complexity, since the coefficients of all selected atoms must be jointly updated after each iteration.
 
@@ -1085,7 +1088,6 @@ fit <- mp_omp_execute(
    mode = 'omp',          # or "mp" for classical Matching Pursuit
    signal = signal,
    n_nonzero_coefs = 50,
-   topk = 10000,
    verbose = FALSE
  )
 
@@ -1094,11 +1096,12 @@ plot(fit)
 
 ### Gabor dictionary preparation {.unnumbered}
 
-For educational and experimental purposes, the individual steps performed 
-internally by the `mp_omp_execute()` function can also be carried out explicitly. 
-These steps include generating an XML file containing the dictionary parameters 
-using `generate_xml_dict()`, reading this file using `read_gabor_dict()`, and 
-preselecting candidate atoms using `topk_gabor_atoms()`. 
+For educational and experimental purposes, the dictionary preparation steps
+performed internally by `mp_omp_execute()` can also be carried out explicitly.
+These include generating an XML file containing the dictionary parameters using
+`generate_xml_dict()` and reading it with `read_gabor_dict()`. The resulting
+parameterized dictionary can be passed directly to `mp_core_gabor()` or
+`omp_core_gabor()` for iterative decomposition.
 
 ```{r generate_xml_dict, include = TRUE, echo = TRUE, warning = FALSE}
 sampling_frequency <- signal$sampling_frequency
@@ -1134,23 +1137,25 @@ dim(atoms_dict)
 head(atoms_dict)
 ```
 
-### Signal-dependent Gabor atom selection {.unnumbered}
+### Iterative Gabor atom selection {.unnumbered}
 
-The `topk_gabor_atoms()` function evaluates all dictionary atoms using 
-phase-invariant complex projections and selects the atoms 
-with the highest similarities to the analysed signal.
+The parameterized dictionary is passed directly to `mp_core_gabor()` or
+`omp_core_gabor()`. At each iteration, candidate atoms are evaluated against
+the current residual using FFT-based projections and analytical phase
+optimization. Only the selected atoms are constructed in the time domain;
+no preliminary top-k ranking or full matrix dictionary is required.
 
-This step substantially reduces the size of the optimization problem.
-Only the selected atoms are retained and converted into real-valued
-Gabor atoms with optimal phase estimates.
-
-```{r topk_gabor_atoms, include = TRUE, echo = TRUE, warning = FALSE}
-dict_topk <- topk_gabor_atoms(
+```{r mp_core_gabor_example, include = TRUE, echo = TRUE, warning = FALSE}
+fit_gabor <- mp_core_gabor(
   atoms_dict = atoms_dict,
   signal = signal,
-  topk = 10000,
-  verbose = TRUE
+  channel = 1,
+  n_nonzero_coefs = 10,
+  verbose = FALSE
 )
+
+fit_gabor$n_iters
+fit_gabor$relative_residual_energy
 ```
 
 ### Validation using a synthetic sparse signal {.unnumbered}
@@ -1286,6 +1291,9 @@ Panel (b) shows the main steps performed internally by `mp_omp_execute()`.
 knitr::include_graphics("../man/figures/main_workflows.png")
 ```
 
+**Figure legend:** Blue boxes represent R functions, while light orange boxes represent 
+workflow steps, inputs, or output objects.
+
 The **general matrix-based MP/OMP workflow** operates directly on a user-defined numeric
 dictionary and input signal through `mp_core()` or `omp_core()`. It is independent
 of the Gabor-specific dictionary construction utilities and can therefore be used
@@ -1295,13 +1303,15 @@ procedure.
 
 The **native R Gabor-based MP/OMP workflow**, implemented by `mp_omp_execute()`,
 provides a higher-level interface for Gabor-based MP and OMP decomposition. It
-integrates dictionary specification or generation, dictionary reading,
-channel-specific atom preselection, decomposition with `mp_core()` or `omp_core()`,
-and aggregation of the results into an object of class `"mp"`. If no XML dictionary
-specification is supplied, `generate_xml_dict()` creates one internally; otherwise,
-the user-provided XML file is used. The specification is processed by
-`read_gabor_dict()`, after which `topk_gabor_atoms()` selects candidate Gabor atoms
-for each signal channel.
+integrates dictionary specification or generation, dictionary reading, iterative
+atom selection against the current residual, and aggregation of channel-specific
+results into an object of class `"mp"`. If no XML dictionary specification is
+supplied, `generate_xml_dict()` creates one internally; otherwise, the
+user-provided XML file is used. The specification is processed by
+`read_gabor_dict()` to construct a parameterized dictionary, which is passed
+directly to `mp_core_gabor()` or `omp_core_gabor()`. These functions use FFT-based
+candidate evaluation and analytical phase optimization, materializing only the
+selected time-domain atoms rather than the complete dictionary.
 
 The **external EMPI-based MP workflow** provides an alternative MP implementation
 through `empi_execute()`. In this case, decomposition is performed by the external
@@ -1465,7 +1475,7 @@ A practical dictionary usually consists of multiple blocks with different window
 | 1619       | 97           | 4096    | 0                 | 2049                   | 0               |
 
 
-An interesting special case are the two last blocks:
+The last two blocks illustrate special cases:
 
 ```
 <block>

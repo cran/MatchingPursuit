@@ -1,4 +1,4 @@
-#' Methods for Matching Pursuit Objects
+#' Methods for Matching Pursuit objects
 #'
 #' Methods for printing, summarizing, and plotting objects of class
 #' \code{"mp"}, together with a print method for objects returned by
@@ -68,8 +68,7 @@
 #' \code{summary.mp()} returns an object of class \code{"summary.mp"}
 #' containing signal dimensions, sampling information, the total number
 #' of selected atoms, the number of selected atoms per channel,
-#' #' signal, residual, and explained energy information, and ranges of
-#' selected atom parameters.
+#' signal, residual, relative residual, and explained energy information.
 #'
 #' \code{plot.mp()} is called for its side effect and returns no value.
 #'
@@ -203,11 +202,13 @@ summary.mp <- function(object, ...) {
     reconstruction_energy <- sum(reconstruction_i^2, na.rm = TRUE)
     residual_energy <- sum((signal_i - reconstruction_i)^2, na.rm = TRUE)
 
-    explained_energy <- if (signal_energy > 0) {
-      1 - residual_energy / signal_energy
+    relative_residual_energy <- if (signal_energy > 0) {
+      residual_energy / signal_energy
     } else {
       NA_real_
     }
+
+    explained_energy <- 1 - relative_residual_energy
 
     channel_summary[[i]] <- data.frame(
       channel = i,
@@ -216,6 +217,7 @@ summary.mp <- function(object, ...) {
       signal_energy = signal_energy,
       reconstruction_energy = reconstruction_energy,
       residual_energy = residual_energy,
+      relative_residual_energy = relative_residual_energy,
       explained_energy = explained_energy,
       stringsAsFactors = FALSE
     )
@@ -246,20 +248,26 @@ print.summary.mp <- function(x, ...) {
   cat("Sampling frequency: ", x$sampling_frequency, " Hz\n", sep = "")
   cat("Duration:           ", signif(x$duration, 6), " s\n", sep = "")
 
-  cat("\nPer-channel decomposition:\n\n")
-  cat("Explained energy = 1 - residual energy / signal energy\n")
-  cat("For MP, this measure is preferred because the reconstruction \n")
-  cat("and residualare not generally orthogonal, so reconstruction \n")
-  cat("energy / signal energy is not equivalent to explained energy.\n")
+  cat("\nPer-channel decomposition:\n")
+  cat("Relative residual energy = residual energy / signal energy\n")
+  cat("Explained energy = 1 - relative residual energy\n\n")
+  cat("Note:\n")
+  cat("-----\n")
+  cat("For MP, this measure is preferred because the reconstruction\n")
+  cat("and residual are not generally orthogonal. Consequently, the\n")
+  cat("ratio reconstruction energy / signal energy is not, in general,\n")
+  cat("equal to the explained energy fraction.\n")
+
 
   for (i in seq_len(nrow(x$channel_summary))) {
 
     ch <- x$channel_summary[i, ]
 
-    cat("\nChannel ", ch$channel, " (", ch$channel_name,"): ", ch$selected_atoms, " atoms\n", sep = "")
+    cat("\nChannel ", ch$channel, ":             ", ch$selected_atoms, " atoms\n", sep = "")
     cat("Signal energy:         ", signif(ch$signal_energy, 6), "\n", sep = "")
     cat("Reconstruction energy: ", signif(ch$reconstruction_energy, 6), "\n", sep = "")
     cat("Residual energy:       ", signif(ch$residual_energy, 6), "\n", sep = "")
+    cat("Relative residual energy: ", signif(ch$relative_residual_energy, 6), "\n", sep = "")
     cat(
       "Explained energy:      ",
       if (is.na(ch$explained_energy)) "NA" else paste0(round(100 * ch$explained_energy, 2), "%"), "\n", sep = "")

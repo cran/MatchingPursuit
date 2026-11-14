@@ -1,7 +1,8 @@
 Package: MatchingPursuit
 Type: Package
-Title: Processing Time Series Data Using the Matching Pursuit Algorithm
-Version: 1.3.0
+Title: Sparse Time Series Decomposition Using Matching Pursuit and
+        Orthogonal Matching Pursuit
+Version: 1.4.0
 Authors@R: c(
   person(
     "Artur", "Gramacki", 
@@ -27,16 +28,16 @@ SystemRequirements: external tool (installed via empi_install()
         EMPI) by Piotr T. Różański, available at
         https://github.com/develancer/empi.
 Imports: edf, signal, RSQLite, imager, raster, graphics, grDevices,
-        utils, digest, EGM, xml2
+        utils, digest, EGM, xml2, Matrix
 Suggests: knitr, rmarkdown, latex2exp, remotes
 VignetteBuilder: knitr
 Depends: R (>= 4.0.0)
 License: GPL-3
 BugReports: https://github.com/artur-gramacki/MatchingPursuit/issues
 Encoding: UTF-8
-RoxygenNote: 7.3.3
 NeedsCompilation: no
-Packaged: 2026-09-17 10:21:08 UTC; Artur
+Packaged: 2026-11-14 00:15:45 UTC; Artur
+Config/roxygen2/version: 8.1.1
 Author: Artur Gramacki [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-1610-9743>),
   Jarosław Gramacki [ctb] (ORCID:
@@ -45,4 +46,4 @@ Author: Artur Gramacki [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-0457-6731>, provided technical
     guidance on the operation of the EMPI software)
 Repository: CRAN
-Date/Publication: 2026-09-17 10:50:07 UTC
+Date/Publication: 2026-11-14 00:40:02 UTC

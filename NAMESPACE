@@ -10,14 +10,11 @@ S3method(print,sig)
 S3method(print,summary.edf)
 S3method(print,summary.mp)
 S3method(print,summary.sig)
-S3method(print,summary.topk)
 S3method(print,summary.wfdb)
-S3method(print,topk)
 S3method(print,wfdb)
 S3method(summary,edf)
 S3method(summary,mp)
 S3method(summary,sig)
-S3method(summary,topk)
 S3method(summary,wfdb)
 export(as_sig)
 export(clear_cache)
@@ -28,11 +25,15 @@ export(empi_execute)
 export(empi_install)
 export(empi_locate)
 export(gabor_atom)
+export(gabor_core_to_mp)
 export(gabor_projection_fft)
 export(generate_xml_dict)
+export(materialize_gabor)
 export(mp_core)
+export(mp_core_gabor)
 export(mp_omp_execute)
 export(omp_core)
+export(omp_core_gabor)
 export(omp_reference)
 export(read_atom_params)
 export(read_csv_signals)
@@ -44,46 +45,61 @@ export(read_wfdb_signals)
 export(resample_signal)
 export(signal_to_bin)
 export(tf_map)
-export(topk_gabor_atoms)
 importFrom(EGM,read_wfdb)
-importFrom(RSQLite,dbConnect)
-importFrom(RSQLite,dbDisconnect)
-importFrom(RSQLite,dbGetQuery)
-importFrom(RSQLite,dbListTables)
+importFrom(RSQLite,
+  dbConnect,
+  dbDisconnect,
+  dbGetQuery,
+  dbListTables
+)
 importFrom(digest,digest)
 importFrom(edf,read.edf)
-importFrom(grDevices,dev.off)
-importFrom(grDevices,graphics.off)
-importFrom(grDevices,hcl.colors)
-importFrom(grDevices,pdf)
-importFrom(grDevices,png)
-importFrom(graphics,abline)
-importFrom(graphics,axis)
-importFrom(graphics,box)
-importFrom(graphics,layout)
-importFrom(graphics,lines)
-importFrom(graphics,mtext)
-importFrom(graphics,par)
-importFrom(graphics,plot)
-importFrom(graphics,plot.new)
-importFrom(graphics,plot.window)
-importFrom(graphics,points)
-importFrom(graphics,rasterImage)
-importFrom(graphics,segments)
-importFrom(graphics,text)
-importFrom(graphics,title)
-importFrom(imager,as.cimg)
-importFrom(imager,resize)
-importFrom(signal,butter)
-importFrom(signal,freqz)
-importFrom(stats,median)
-importFrom(stats,mvfft)
+importFrom(grDevices,
+  dev.off,
+  graphics.off,
+  hcl.colors,
+  pdf,
+  png
+)
+importFrom(graphics,
+  abline,
+  axis,
+  box,
+  layout,
+  lines,
+  mtext,
+  par,
+  plot,
+  plot.new,
+  plot.window,
+  points,
+  rasterImage,
+  segments,
+  text,
+  title
+)
+importFrom(imager,
+  as.cimg,
+  resize
+)
+importFrom(signal,
+  butter,
+  freqz
+)
+importFrom(stats,
+  median,
+  mvfft
+)
 importFrom(tools,file_path_sans_ext)
-importFrom(utils,download.file)
-importFrom(utils,flush.console)
-importFrom(utils,read.table)
-importFrom(utils,tail)
-importFrom(utils,unzip)
-importFrom(xml2,read_xml)
-importFrom(xml2,xml_attr)
-importFrom(xml2,xml_find_all)
+importFrom(utils,
+  download.file,
+  flush.console,
+  read.table,
+  tail,
+  unzip
+)
+importFrom(xml2,
+  read_xml,
+  xml_attr,
+  xml_find_all
+)

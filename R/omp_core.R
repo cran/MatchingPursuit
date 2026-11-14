@@ -1,4 +1,4 @@
-#' Implements Orthogonal Matching Pursuit (OMP) algorithm
+#' Implements Orthogonal Matching Pursuit algorithm
 #'
 #' Performs Orthogonal Matching Pursuit (OMP) to obtain a sparse
 #' representation of a signal using a dictionary of candidate atoms.
@@ -13,10 +13,11 @@
 #' factorization.
 #'
 #' @param dictionary
-#' A dictionary of atoms. Can be a numeric vector, matrix, or data frame.
-#' Atoms are assumed to be stored in columns.
-#' Dictionary atoms are internally normalized to unit L2 norm before decomposition.
-#' Therefore, atom selection is invariant to non-zero scaling of dictionary columns.
+#' A dictionary of atoms. Can be a numeric vector, matrix, data frame, or an
+#' object derived from class \code{"Matrix"}. Atoms are assumed to be stored
+#' in columns. Dictionary atoms are internally normalized to unit L2 norm
+#' before decomposition. Therefore, atom selection is invariant to non-zero
+#' scaling of dictionary columns.
 #'
 #' @param signal
 #' Can be a numeric vector, matrix, or data frame. Signals are
@@ -24,15 +25,18 @@
 #' match the atom length.
 #'
 #' @param channel
-#' Index of the signal (channel) to decompose.
+#' Index of the signal channel to decompose. If \code{NULL}, channel 1 is used
+#' automatically for a single-channel signal. For multichannel signals,
+#' \code{channel} must be specified.
 #'
 #' @param n_nonzero_coefs
 #' Maximum number of non-zero coefficients in the sparse representation.
 #' If \code{tol = NULL}, the algorithm stops after selecting at most
 #' \code{n_nonzero_coefs} atoms. If both \code{n_nonzero_coefs} and
 #' \code{tol} are \code{NULL}, the default value is
-#' \code{max(1, floor(0.1 * ncol(dictionary)))}. Ignored when
-#' \code{tol} is specified.
+#' \code{max(1, floor(0.1 * ncol(dictionary)))}.
+#' If \code{tol} is specified, \code{n_nonzero_coefs} does not control the
+#' stopping criterion.
 #'
 #' @param tol Optional stopping tolerance for the relative residual energy,
 #'   defined as
@@ -40,6 +44,14 @@
 #'   The algorithm stops when this value is less than or equal to
 #'   \code{tol}. If specified, \code{tol} overrides
 #'   \code{n_nonzero_coefs}.
+#'
+#' @param sparse
+#' Logical; if \code{TRUE}, a dense dictionary is converted internally to a
+#' sparse matrix before OMP decomposition. This can substantially improve
+#' performance for dictionaries containing many zero values. If the supplied
+#' dictionary is already sparse, its sparse representation is preserved
+#' regardless of this argument.
+#' Defaults to \code{FALSE}.
 #'
 #' @param verbose
 #' Logical; flag indicating whether progress information should be printed.
@@ -108,10 +120,9 @@
 #'   Number of OMP iterations performed.}
 #'
 #' @seealso
-#' \code{\link{topk_gabor_atoms}},
 #' \code{\link{mp_core}},
-#' \code{\link{mp_omp_execute}},
-#' \code{\link{tf_map}}
+#' \code{\link{omp_core_gabor}},
+#' \code{\link{mp_omp_execute}}
 #'
 #' @export
 #'
@@ -153,7 +164,8 @@
 #' fit$relative_residual_energy
 #' # [1] 1.00000000 0.28422833 0.16609350 0.08795047
 #'
-#' # For a complete Gabor decomposition workflow, see mp_omp_execute().
+#' # For Gabor-specific decomposition, see omp_core_gabor()
+#' # and mp_omp_execute().
 #'
 
 omp_core <- function(
@@ -162,8 +174,17 @@ omp_core <- function(
     channel = NULL,
     n_nonzero_coefs = NULL,
     tol = NULL,
+    sparse = FALSE,
     verbose = FALSE
 ) {
+
+  if (!is.logical(sparse) || length(sparse) != 1L || is.na(sparse)) {
+    stop("'sparse' must be TRUE or FALSE.")
+  }
+
+  if (!is.logical(verbose) || length(verbose) != 1L || is.na(verbose)) {
+    stop("'verbose' must be TRUE or FALSE.")
+  }
 
   # Signal
   if (is.vector(signal) || is.data.frame(signal) || is.matrix(signal)) {
@@ -188,8 +209,17 @@ omp_core <- function(
   # Dictionary
   if (is.vector(dictionary) || is.data.frame(dictionary) || is.matrix(dictionary)) {
     D <- as.matrix(dictionary)
+  } else if (inherits(dictionary, "Matrix")) {
+    D <- dictionary
   } else {
-      stop("'dictionary' must be a matrix or convertible to a matrix.")
+    stop("'dictionary' must be a matrix or convertible to a matrix.")
+  }
+
+  # Convert a dense dictionary to sparse representation when requested.
+  # A dictionary that is already sparse remains sparse regardless of
+  # the value of 'sparse'.
+  if (sparse && !inherits(D, "sparseMatrix")) {
+    D <- Matrix::Matrix(D, sparse = TRUE)
   }
 
   n <- nrow(D)
@@ -249,7 +279,16 @@ omp_core <- function(
     max_iter <- p
   }
 
-  norms <- sqrt(colSums(D^2))
+  # Normalize dictionary atoms to unit L2 norm.
+  # This makes atom selection independent of arbitrary column scaling
+  # and provides a common representation for arbitrary dictionaries.
+  #norms <- sqrt(colSums(D^2))
+  if (inherits(D, "Matrix")) {
+    norms <- sqrt(Matrix::colSums(D^2))
+  } else {
+    norms <- sqrt(colSums(D^2))
+  }
+
   if (any(!is.finite(norms)) || any(norms < 1e-12)) {
     stop("Dictionary contains non-finite or zero/near-zero norm atoms.")
   }
@@ -257,7 +296,7 @@ omp_core <- function(
   # Pre-compute Dtsig only
   # D' * signal does not change during OMP, so compute it only once.
   # It is later used in the least-squares solution for the active set.
-  Dtsig <- as.vector(crossprod(D, sig)) / norms
+  Dtsig <- as.numeric(crossprod(D, sig)) / norms
 
   # Outputs
   support <- integer(0)
@@ -290,7 +329,7 @@ omp_core <- function(
   for (k in seq_len(max_iter)) {
 
     # 1. Select the atom most correlated with the current residual
-    corr <- as.vector(crossprod(D, residual)) / norms
+    corr <- as.numeric(crossprod(D, residual)) / norms
 
     # Previously selected atoms must not be selected again.
     if (length(support) > 0) {
@@ -308,7 +347,7 @@ omp_core <- function(
     } else {
       # lazy Gram computation
       # Correlations of the new atom with previously selected atoms.
-      w <- as.vector(crossprod(D[, support, drop = FALSE], D[, j])) / (norms[support] * norms[j])
+      w <- as.numeric(crossprod(D[, support, drop = FALSE], D[, j])) / (norms[support] * norms[j])
 
       # Solve L v = w
       v <- forwardsolve(L, w)
@@ -336,10 +375,14 @@ omp_core <- function(
     x_active <- as.numeric(backsolve(t(L), z))
 
     # 4. Build the full sparse coefficient vector
-    if (verbose) message("iteration: ", k, ", selected atom: ", j)
+    #if (verbose) message("iteration: ", k, ", selected atom: ", j)
+    if (verbose) {
+      atom_id <- if (!is.null(colnames(D))) colnames(D)[j] else j
+      message("iteration: ", k, ", selected atom: ", atom_id)
+    }
 
     # 5. Update residual
-    residual <- sig -  D[, support, drop = FALSE] %*% (x_active / norms[support])
+    residual <- sig -  as.numeric(D[, support, drop = FALSE] %*% (x_active / norms[support]))
 
     # 6. Store residual energy and check stopping criterion
     residual_sq_norm <- sum(residual^2)
@@ -361,7 +404,7 @@ omp_core <- function(
     }
   }
 
-  selected_atoms <- sweep(D[, support, drop = FALSE], 2, norms[support], "/")
+  selected_atoms <- sweep(as.matrix(D[, support, drop = FALSE]), 2, norms[support], "/")
   coefs_selected  <- x_active
 
   # Energy assigned to selected OMP atoms
