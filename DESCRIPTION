@@ -2,7 +2,7 @@ Package: MatchingPursuit
 Type: Package
 Title: Sparse Time Series Decomposition Using Matching Pursuit and
         Orthogonal Matching Pursuit
-Version: 1.4.0
+Version: 1.4.1
 Authors@R: c(
   person(
     "Artur", "Gramacki", 
@@ -36,7 +36,7 @@ License: GPL-3
 BugReports: https://github.com/artur-gramacki/MatchingPursuit/issues
 Encoding: UTF-8
 NeedsCompilation: no
-Packaged: 2026-11-14 00:15:45 UTC; Artur
+Packaged: 2026-11-24 19:33:34 UTC; Artur
 Config/roxygen2/version: 8.1.1
 Author: Artur Gramacki [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-1610-9743>),
@@ -46,4 +46,4 @@ Author: Artur Gramacki [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-0457-6731>, provided technical
     guidance on the operation of the EMPI software)
 Repository: CRAN
-Date/Publication: 2026-11-14 00:40:02 UTC
+Date/Publication: 2026-11-24 20:10:02 UTC

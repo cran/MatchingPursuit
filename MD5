@@ -1,6 +1,6 @@
-cca045ccaa55c9ad04f15c1897ace534 *DESCRIPTION
+5d596aad94a80236713cfc20dba5f43b *DESCRIPTION
 bfaf269e6073ddd7526d444532727a30 *NAMESPACE
-6c5c5b6b41df5fcb7bfb347f7e47b684 *NEWS.md
+bba6d58cd6c9ccbff5fa50087fb99876 *NEWS.md
 4e17b05f1127ee4a07f720135bcca443 *R/as_sig.R
 e16d9b4412769e8ebfea8274b7729b8b *R/check_checksum.R
 5549103fff3bd2811138da03c2b02310 *R/clear_cache.R
@@ -37,12 +37,12 @@ d1b93c00a6af5100895b3e6c275196ee *R/read_gabor_dict.R
 de503ca458e9628a94df5882c1e0469c *R/signal_to_bin.R
 08d1ba433eeae3473df3334bf808e81f *R/tf_map.R
 80bd3dbe062b3c33a98170cf300ece06 *R/wfdb-methods.R
-344e456b241e884be05e4f4a6d01751d *README.md
+c994aa61cef330cef31052d3dfbb52fb *README.md
 14d179053a0c6b1b9097c5644394d35c *build/partial.rdb
 bbe373f59d6c2751ba482f123e9ac797 *build/vignette.rds
 251a316897f1edbca40ee859e7283f20 *inst/doc/MatchingPursuit.R
-36a1a313fca2e0427f3f918ad4bdfafc *inst/doc/MatchingPursuit.Rmd
-c46bfab4233287efa2f45d318b926ed1 *inst/doc/MatchingPursuit.html
+45c705aa206906e98bd638277886009a *inst/doc/MatchingPursuit.Rmd
+6b64c63e3b2c625a809255b9a67e107f *inst/doc/MatchingPursuit.html
 b3518cb417dd852dda299fe3c1341c9b *inst/extdata/00001_lr.csv
 62a98e8a1ecc5484a28191795a0d6464 *inst/extdata/00001_lr.dat
 f95db63afeabf578dd65b8fb23fbcd5d *inst/extdata/00001_lr.hea
@@ -66,9 +66,12 @@ d570b312ef94335ddee8681822ee1098 *man/empi_check.Rd
 1611998eabebe5637a56edaf111b3f96 *man/empi_execute.Rd
 c5946b1e3ff6738837960200621d5421 *man/empi_install.Rd
 94619ade969196fc755528db07e2d077 *man/empi_locate.Rd
-fdb2cc560a920a29c26d0f8c5470c566 *man/figures/empi.png
-78bd4cd3050470c23a533bfb8c24d69d *man/figures/main_workflows.png
-04f69fd7127a8a0ec160c7eebfd4fb2c *man/figures/mp.png
+59acd42283641aa5212caa28c542170d *man/figures/ecg.png
+c17ac806e03aadf7bf8a04a57a0c7d73 *man/figures/ecg_grid.png
+244bdcf54c94e50a6440fa8b030c3716 *man/figures/eeg.png
+79f90e7c272a4036ab35a14bec28a020 *man/figures/empi.png
+4823a9f294e6993632a42bf246d5435b *man/figures/main_workflows.png
+37f8f7aac711313f1fc0fc3297572fe6 *man/figures/mp.png
 edad53e6a6ddc729fbaee83f5839037e *man/gabor_atom.Rd
 a5d15af062329f307125b1f94aafbef0 *man/gabor_core_to_mp.Rd
 4012cf20dfc8a8a0f20e6f3e0359bc0d *man/gabor_projection_fft.Rd
@@ -93,5 +96,5 @@ df59b33a29e5e7aff241efeb532978a0 *man/sig-methods.Rd
 8981f0d958b7347bf5c84037efc3120d *man/signal_to_bin.Rd
 962f47337b8897a4adda628b4e0a1821 *man/tf_map.Rd
 73b36e8d3145da7fed9a432df4e9c6d4 *man/wfdb-methods.Rd
-36a1a313fca2e0427f3f918ad4bdfafc *vignettes/MatchingPursuit.Rmd
+45c705aa206906e98bd638277886009a *vignettes/MatchingPursuit.Rmd
 b801752acc930928111cf7b34dd41e1a *vignettes/bibliography.bib
